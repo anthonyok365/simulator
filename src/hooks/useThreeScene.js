@@ -389,9 +389,9 @@ export function useThreeScene() {
     controlsRef.current = controls;
 
     // Lights (intensities multiplied for Three.js 0.152+ compatibility)
-    const hemi = new THREE.HemisphereLight(0x8fa0a8, 0x1a1712, 2.7);
+    const hemi = new THREE.HemisphereLight(0x8fa0a8, 0x1a1712, 9);
     scene.add(hemi);
-    const sun = new THREE.DirectionalLight(0xfff2d8, 4.05);
+    const sun = new THREE.DirectionalLight(0xfff2d8, 13.5);
     sun.position.set(9, 14, 6);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -403,7 +403,7 @@ export function useThreeScene() {
     sun.shadow.camera.far = 40;
     sun.shadow.bias = -0.0018;
     scene.add(sun);
-    const fillLight = new THREE.DirectionalLight(0x6a90ff, 0.54);
+    const fillLight = new THREE.DirectionalLight(0x6a90ff, 1.8);
     fillLight.position.set(-8, 6, -8);
     scene.add(fillLight);
 
