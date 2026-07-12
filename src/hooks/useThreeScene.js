@@ -69,7 +69,7 @@ export function useThreeScene() {
     });
     
     const tex = new THREE.CanvasTexture(c);
-    tex.encoding = THREE.sRGBEncoding;
+    tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, []);
 
@@ -88,7 +88,7 @@ export function useThreeScene() {
     ctx.shadowBlur = 14;
     ctx.fillText(text, 128, 68);
     const tex = new THREE.CanvasTexture(c);
-    tex.encoding = THREE.sRGBEncoding;
+    tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, []);
 
@@ -125,7 +125,7 @@ export function useThreeScene() {
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, 512, 512);
     const tex = new THREE.CanvasTexture(c);
-    tex.encoding = THREE.sRGBEncoding;
+    tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, []);
 
@@ -151,7 +151,7 @@ export function useThreeScene() {
     ctx.font = '600 22px "JetBrains Mono", monospace';
     ctx.fillText('AGM DEEP CYCLE', 256, 160);
     const tex = new THREE.CanvasTexture(c);
-    tex.encoding = THREE.sRGBEncoding;
+    tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
   }, []);
 
@@ -371,7 +371,7 @@ export function useThreeScene() {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.outputEncoding = THREE.sRGBEncoding;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     rendererRef.current = renderer;
