@@ -331,8 +331,10 @@ function App() {
   const handleTrayClick = useCallback((type) => {
     if (placed[type]) return;
     const zone = ZONES[type];
-    placeComponent(type, zone.x, zone.z, handlePlaced);
-  }, [placed, placeComponent, handlePlaced]);
+    // Pass panel specs when placing the panel
+    const specs = type === 'panel' ? currentSpecs : null;
+    placeComponent(type, zone.x, zone.z, handlePlaced, specs);
+  }, [placed, placeComponent, handlePlaced, currentSpecs]);
 
   // Reset
   const handleReset = useCallback(() => {

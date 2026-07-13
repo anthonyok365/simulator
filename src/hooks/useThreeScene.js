@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { INV_MIN_V, INV_MAX_V, OWNER, GROUP, ZONES, RED, BLACK } from '../utils/constants';
+import { PANEL_CATALOG, getProductSpecs } from '../utils/panelCatalog';
 
 export function useThreeScene() {
   const canvasRef = useRef(null);
@@ -92,41 +93,177 @@ export function useThreeScene() {
     return tex;
   }, []);
 
-  const makePanelCellTexture = useCallback(() => {
-    const c = document.createElement('canvas');
-    c.width = 512;
-    c.height = 512;
-    const ctx = c.getContext('2d');
-    const g = ctx.createLinearGradient(0, 0, 512, 512);
-    g.addColorStop(0, '#1c4d7a');
-    g.addColorStop(0.55, '#0d2c4a');
-    g.addColorStop(1, '#081b30');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 512, 512);
-    ctx.strokeStyle = 'rgba(80,140,190,0.55)';
-    ctx.lineWidth = 2;
-    for (let i = 1; i < 6; i++) {
-      const x = i * 512 / 6;
-      ctx.beginPath();
-      ctx.moveTo(x, 0);
-      ctx.lineTo(x, 512);
-      ctx.stroke();
+  // Layered panel texture generation
+  const makePanelTextures = useCallback((cols, rows) => {
+    // Use a higher resolution canvas for better quality
+    const SIZE = 1024;
+    const cellWidth = SIZE / cols;
+    const cellHeight = SIZE / rows;
+    
+    // === DIFFUSE MAP ===
+    const diffuseCanvas = document.createElement('canvas');
+    diffuseCanvas.width = SIZE;
+    diffuseCanvas.height = SIZE;
+    const dctx = diffuseCanvas.getContext('2d');
+    
+    // Base cell color - dark blue-black as specified
+    dctx.fillStyle = '#0a0a0d';
+    dctx.fillRect(0, 0, SIZE, SIZE);
+    
+    // Cell variation - subtle gradient within each cell
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const x = col * cellWidth;
+        const y = row * cellHeight;
+        
+        // Subtle cell-to-cell variation
+        const brightness = 0.92 + Math.random() * 0.08;
+        const r = Math.floor(10 * brightness);
+        const g = Math.floor(10 * brightness);
+        const b = Math.floor(13 * brightness);
+        
+        dctx.fillStyle = `rgb(${r},${g},${b})`;
+        dctx.fillRect(x + 1, y + 1, cellWidth - 2, cellHeight - 2);
+      }
     }
-    for (let i = 1; i < 10; i++) {
-      const y = i * 512 / 10;
-      ctx.beginPath();
-      ctx.moveTo(0, y);
-      ctx.lineTo(512, y);
-      ctx.stroke();
+    
+    // Fine busbar lines (very thin, ~1px at this scale) - soft grey
+    dctx.strokeStyle = 'rgba(74, 77, 82, 0.4)';
+    dctx.lineWidth = 1;
+    
+    // Vertical busbars (multiple thin lines per cell)
+    for (let col = 0; col < cols; col++) {
+      const baseX = col * cellWidth;
+      for (let i = 1; i <= 11; i++) {
+        const x = baseX + (i / 12) * cellWidth;
+        dctx.beginPath();
+        dctx.moveTo(x, 0);
+        dctx.lineTo(x, SIZE);
+        dctx.stroke();
+      }
     }
-    const grad = ctx.createLinearGradient(0, 0, 512, 512);
-    grad.addColorStop(0, 'rgba(255,255,255,0.18)');
-    grad.addColorStop(0.4, 'rgba(255,255,255,0)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, 512, 512);
-    const tex = new THREE.CanvasTexture(c);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
+    
+    // Horizontal busbars
+    for (let row = 0; row < rows; row++) {
+      const baseY = row * cellHeight;
+      for (let i = 1; i <= 3; i++) {
+        const y = baseY + (i / 4) * cellHeight;
+        dctx.beginPath();
+        dctx.moveTo(0, y);
+        dctx.lineTo(SIZE, y);
+        dctx.stroke();
+      }
+    }
+    
+    // Cell gap lines (slightly darker to create separation)
+    dctx.strokeStyle = 'rgba(5, 5, 6, 0.8)';
+    dctx.lineWidth = 2;
+    for (let col = 0; col <= cols; col++) {
+      const x = col * cellWidth;
+      dctx.beginPath();
+      dctx.moveTo(x, 0);
+      dctx.lineTo(x, SIZE);
+      dctx.stroke();
+    }
+    for (let row = 0; row <= rows; row++) {
+      const y = row * cellHeight;
+      dctx.beginPath();
+      dctx.moveTo(0, y);
+      dctx.lineTo(SIZE, y);
+      dctx.stroke();
+    }
+    
+    // Glass reflection gradient (subtle highlight)
+    const glassGrad = dctx.createLinearGradient(0, 0, SIZE * 0.3, SIZE * 0.3);
+    glassGrad.addColorStop(0, 'rgba(255,255,255,0.12)');
+    glassGrad.addColorStop(0.5, 'rgba(255,255,255,0)');
+    dctx.fillStyle = glassGrad;
+    dctx.fillRect(0, 0, SIZE, SIZE);
+    
+    const diffuseTex = new THREE.CanvasTexture(diffuseCanvas);
+    diffuseTex.colorSpace = THREE.SRGBColorSpace;
+    diffuseTex.wrapS = THREE.RepeatWrapping;
+    diffuseTex.wrapT = THREE.RepeatWrapping;
+    
+    // === ROUGHNESS MAP ===
+    const roughnessCanvas = document.createElement('canvas');
+    roughnessCanvas.width = SIZE;
+    roughnessCanvas.height = SIZE;
+    const rctx = roughnessCanvas.getContext('2d');
+    
+    // Base roughness - low (coated glass appearance)
+    rctx.fillStyle = 'rgb(30, 30, 30)'; // ~0.12 roughness
+    rctx.fillRect(0, 0, SIZE, SIZE);
+    
+    // Slightly higher roughness at cell gaps
+    rctx.strokeStyle = 'rgb(60, 60, 60)'; // ~0.24 roughness at gaps
+    rctx.lineWidth = 4;
+    for (let col = 0; col <= cols; col++) {
+      const x = col * cellWidth;
+      rctx.beginPath();
+      rctx.moveTo(x, 0);
+      rctx.lineTo(x, SIZE);
+      rctx.stroke();
+    }
+    for (let row = 0; row <= rows; row++) {
+      const y = row * cellHeight;
+      rctx.beginPath();
+      rctx.moveTo(0, y);
+      rctx.lineTo(SIZE, y);
+      rctx.stroke();
+    }
+    
+    const roughnessTex = new THREE.CanvasTexture(roughnessCanvas);
+    roughnessTex.wrapS = THREE.RepeatWrapping;
+    roughnessTex.wrapT = THREE.RepeatWrapping;
+    
+    // === BUMP MAP ===
+    const bumpCanvas = document.createElement('canvas');
+    bumpCanvas.width = SIZE;
+    bumpCanvas.height = SIZE;
+    const bctx = bumpCanvas.getContext('2d');
+    
+    // Base bump - neutral
+    bctx.fillStyle = 'rgb(128, 128, 128)';
+    bctx.fillRect(0, 0, SIZE, SIZE);
+    
+    // Cell gap grooves (darker = lower = groove)
+    bctx.strokeStyle = 'rgb(80, 80, 80)';
+    bctx.lineWidth = 3;
+    for (let col = 0; col <= cols; col++) {
+      const x = col * cellWidth;
+      bctx.beginPath();
+      bctx.moveTo(x, 0);
+      bctx.lineTo(x, SIZE);
+      bctx.stroke();
+    }
+    for (let row = 0; row <= rows; row++) {
+      const y = row * cellHeight;
+      bctx.beginPath();
+      bctx.moveTo(0, y);
+      bctx.lineTo(SIZE, y);
+      bctx.stroke();
+    }
+    
+    // Busbar ridges (lighter = higher)
+    bctx.strokeStyle = 'rgb(160, 160, 160)';
+    bctx.lineWidth = 1;
+    for (let col = 0; col < cols; col++) {
+      const baseX = col * cellWidth;
+      for (let i = 1; i <= 11; i++) {
+        const x = baseX + (i / 12) * cellWidth;
+        bctx.beginPath();
+        bctx.moveTo(x, 0);
+        bctx.lineTo(x, SIZE);
+        bctx.stroke();
+      }
+    }
+    
+    const bumpTex = new THREE.CanvasTexture(bumpCanvas);
+    bumpTex.wrapS = THREE.RepeatWrapping;
+    bumpTex.wrapT = THREE.RepeatWrapping;
+    
+    return { diffuse: diffuseTex, roughness: roughnessTex, bump: bumpTex };
   }, []);
 
   const makeBatteryLabel = useCallback(() => {
@@ -185,48 +322,212 @@ export function useThreeScene() {
   }, []);
 
   // Model builders
-  const buildPanel = useCallback(() => {
+  const buildPanel = useCallback((specs) => {
     const g = new THREE.Group();
+    
+    // Get dimensions based on specs (in mm, convert to meters)
+    // 400W: 1855×1029mm, 550W: 2274×1134mm, 650W: 2382×1134mm
+    const width = specs ? specs.dimensions[0] / 1000 : 1.855; // default 400W
+    const height = specs ? specs.dimensions[1] / 1000 : 1.029;
+    
+    // Scale factor to keep consistent visual size
+    const scaleX = width / 1.855;
+    const scaleY = height / 1.029;
+    
+    // Frame thickness
+    const frameThick = 0.04;
+    const frameDepth = 0.03;
+    
+    // Material colors
+    const frameColor = 0xb8bdb8;
+    const frameInnerColor = 0x8a8f88;
+    
+    // === LEGS ===
     const legMat = new THREE.MeshStandardMaterial({ color: 0x8a8f88, roughness: 0.5, metalness: 0.6 });
     const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.4, 0.12), legMat);
-    leg1.position.set(-0.9, 0.7, 0.55);
+    leg1.position.set(-width * 0.35, 0.7, 0.55);
     leg1.rotation.x = -0.35;
     leg1.castShadow = true;
     const leg2 = leg1.clone();
-    leg2.position.x = 0.9;
+    leg2.position.x = width * 0.35;
     g.add(leg1, leg2);
     
-    const frameMat = new THREE.MeshStandardMaterial({ color: 0xc7cbc6, roughness: 0.4, metalness: 0.7 });
-    const frame = new THREE.Mesh(new THREE.BoxGeometry(2.4, 1.5, 0.08), frameMat);
-    const cellMat = new THREE.MeshStandardMaterial({ map: makePanelCellTexture(), roughness: 0.25, metalness: 0.15 });
-    const cells = new THREE.Mesh(new THREE.BoxGeometry(2.24, 1.34, 0.03), cellMat);
+    // === FRAME (outer) ===
+    const frameMat = new THREE.MeshStandardMaterial({ 
+      color: frameColor, 
+      roughness: 0.35, 
+      metalness: 0.75 
+    });
     
+    // Create frame as a hollow box (using multiple planes)
+    const frameGroup = new THREE.Group();
+    
+    // Top frame
+    const topFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(width + frameThick * 2, frameThick, frameDepth),
+      frameMat
+    );
+    topFrame.position.set(0, height / 2 + frameThick / 2, 0);
+    topFrame.castShadow = true;
+    frameGroup.add(topFrame);
+    
+    // Bottom frame
+    const bottomFrame = topFrame.clone();
+    bottomFrame.position.y = -(height / 2 + frameThick / 2);
+    frameGroup.add(bottomFrame);
+    
+    // Left frame
+    const leftFrame = new THREE.Mesh(
+      new THREE.BoxGeometry(frameThick, height, frameDepth),
+      frameMat
+    );
+    leftFrame.position.set(-(width / 2 + frameThick / 2), 0, 0);
+    leftFrame.castShadow = true;
+    frameGroup.add(leftFrame);
+    
+    // Right frame
+    const rightFrame = leftFrame.clone();
+    rightFrame.position.x = width / 2 + frameThick / 2;
+    frameGroup.add(rightFrame);
+    
+    // === INNER FRAME (inset line) ===
+    const innerFrameMat = new THREE.MeshStandardMaterial({ 
+      color: frameInnerColor, 
+      roughness: 0.4, 
+      metalness: 0.7 
+    });
+    const innerInset = 0.012; // 12mm inset
+    const innerThick = 0.008; // 8mm thick inset line
+    
+    const innerFrameGroup = new THREE.Group();
+    
+    // Inner top
+    const innerTop = new THREE.Mesh(
+      new THREE.BoxGeometry(width - innerInset * 2, innerThick, frameDepth * 0.3),
+      innerFrameMat
+    );
+    innerTop.position.set(0, height / 2 - innerInset - innerThick / 2, frameDepth * 0.15);
+    innerFrameGroup.add(innerTop);
+    
+    // Inner bottom
+    const innerBottom = innerTop.clone();
+    innerBottom.position.y = -(height / 2 - innerInset - innerThick / 2);
+    innerFrameGroup.add(innerBottom);
+    
+    // Inner left
+    const innerLeft = new THREE.Mesh(
+      new THREE.BoxGeometry(innerThick, height - innerInset * 2 - innerThick * 2, frameDepth * 0.3),
+      innerFrameMat
+    );
+    innerLeft.position.set(-(width / 2 - innerInset - innerThick / 2), 0, frameDepth * 0.15);
+    innerFrameGroup.add(innerLeft);
+    
+    // Inner right
+    const innerRight = innerLeft.clone();
+    innerRight.position.x = width / 2 - innerInset - innerThick / 2;
+    innerFrameGroup.add(innerRight);
+    
+    // === CELL SURFACE ===
+    // Calculate cell grid based on aspect ratio
+    // 400W: ~6×10 cells, 550W/650W: taller aspect ratio
+    const cellAspect = width / height;
+    let cols, rows;
+    if (cellAspect > 1.8) {
+      // 550W/650W: wider panels have more columns
+      cols = 12;
+      rows = Math.round(12 / cellAspect * 1.5);
+    } else {
+      // 400W: more square
+      cols = 10;
+      rows = 6;
+    }
+    
+    const textures = makePanelTextures(cols, rows);
+    
+    const cellMat = new THREE.MeshStandardMaterial({
+      map: textures.diffuse,
+      roughnessMap: textures.roughness,
+      bumpMap: textures.bump,
+      bumpScale: 0.02,
+      roughness: 0.15,
+      metalness: 0.1
+    });
+    
+    const cellSurface = new THREE.Mesh(
+      new THREE.PlaneGeometry(width - frameThick * 2, height - frameThick * 2),
+      cellMat
+    );
+    cellSurface.rotation.x = -Math.PI / 2;
+    cellSurface.position.y = 0.001; // Just above frame
+    cellSurface.receiveShadow = true;
+    
+    // === CROSSBAR ===
+    const crossbarMat = new THREE.MeshStandardMaterial({ 
+      color: frameColor, 
+      roughness: 0.35, 
+      metalness: 0.75 
+    });
+    const crossbar = new THREE.Mesh(
+      new THREE.BoxGeometry(width - frameThick * 2, 0.025, 0.015),
+      crossbarMat
+    );
+    crossbar.position.set(0, 0, frameDepth * 0.5 + 0.008);
+    crossbar.castShadow = true;
+    
+    // === MOUNTING HOLES ===
+    const holeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
+    const holeRadius = 0.015;
+    const holePositions = [
+      [-width * 0.35, height * 0.35],
+      [width * 0.35, height * 0.35],
+      [-width * 0.35, -height * 0.35],
+      [width * 0.35, -height * 0.35],
+    ];
+    
+    // === ASSEMBLE PANEL GROUP ===
     const panelGroup = new THREE.Group();
-    panelGroup.add(frame, cells);
-    cells.position.z = 0.05;
-    panelGroup.position.set(0, 1.55, -0.05);
+    panelGroup.add(frameGroup);
+    panelGroup.add(innerFrameGroup);
+    panelGroup.add(cellSurface);
+    panelGroup.add(crossbar);
+    
+    // Add mounting holes
+    holePositions.forEach(([x, y]) => {
+      const hole = new THREE.Mesh(
+        new THREE.CylinderGeometry(holeRadius, holeRadius, frameDepth * 1.5, 12),
+        holeMat
+      );
+      hole.rotation.x = Math.PI / 2;
+      hole.position.set(x, y, 0);
+      panelGroup.add(hole);
+    });
+    
+    // Position and tilt the panel
+    panelGroup.position.set(0, height / 2 + 0.4, -0.05);
     panelGroup.rotation.x = -0.5;
-    frame.castShadow = true;
-    cells.castShadow = true;
     g.add(panelGroup);
     
+    // === JUNCTION BOX ===
     const jbox = new THREE.Mesh(
       new THREE.BoxGeometry(0.4, 0.14, 0.14),
       new THREE.MeshStandardMaterial({ color: 0x1c1e19 })
     );
-    jbox.position.set(0, 0.95, 0.62);
+    jbox.position.set(0, height / 2 + 0.1, 0.62);
     g.add(jbox);
     
+    // === TERMINALS ===
     const tPos = makeTerminal('p_pos', RED);
-    tPos.position.set(-0.16, 0.95, 0.72);
+    tPos.position.set(-0.16, height / 2 + 0.1, 0.72);
     const tNeg = makeTerminal('p_neg', BLACK);
-    tNeg.position.set(0.16, 0.95, 0.72);
+    tNeg.position.set(0.16, height / 2 + 0.1, 0.72);
     g.add(tPos, tNeg);
     
     g.userData.terminals = { p_pos: tPos, p_neg: tNeg };
     g.userData.paintables = [frameMat, cellMat, legMat];
+    g.userData.panelSpecs = specs;
+    
     return g;
-  }, [makePanelCellTexture, makeTerminal]);
+  }, [makePanelTextures, makeTerminal]);
 
   const buildController = useCallback(() => {
     const g = new THREE.Group();
@@ -499,9 +800,14 @@ export function useThreeScene() {
     };
   }, [makeGroundTexture]);
 
-  const placeComponent = useCallback((type, x, z, onPlaced) => {
+  const placeComponent = useCallback((type, x, z, onPlaced, specs) => {
     if (!sceneRef.current) return;
-    const group = BUILDERS[type]();
+    
+    // Pass specs to panel builder
+    const group = type === 'panel' && specs 
+      ? BUILDERS[type](specs) 
+      : BUILDERS[type]();
+    
     group.position.set(x, 0, z);
     sceneRef.current.add(group);
     modelsRef.current[type] = group;
