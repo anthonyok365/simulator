@@ -4,6 +4,113 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { INV_MIN_V, INV_MAX_V, OWNER, GROUP, ZONES, RED, BLACK } from '../utils/constants';
 import { PANEL_CATALOG, getProductSpecs } from '../utils/panelCatalog';
 
+// Reference to currently loaded panel texture (will be set when user provides image)
+let panelTextureRef = null;
+
+// === BACKGROUND BUILDERS ===
+function buildResidentialBackdrop(scene) {
+  const group = new THREE.Group();
+  
+  // House body
+  const houseMat = new THREE.MeshStandardMaterial({ color: 0x3a3f35, roughness: 0.9 });
+  const houseBody = new THREE.Mesh(new THREE.BoxGeometry(6.2, 2.6, 2.2), houseMat);
+  houseBody.position.set(-4.3, 1.3, -5.6);
+  houseBody.castShadow = true;
+  houseBody.receiveShadow = true;
+  group.add(houseBody);
+  
+  // Pitched roof
+  const roofMat = new THREE.MeshStandardMaterial({ color: 0x5a4133, roughness: 0.85 });
+  const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.25, 3.6), roofMat);
+  roofSlab.position.set(-4.3, 2.75, -4.3);
+  roofSlab.rotation.x = -0.28;
+  roofSlab.castShadow = true;
+  roofSlab.receiveShadow = true;
+  group.add(roofSlab);
+  
+  // Back wall
+  const wallMat = new THREE.MeshStandardMaterial({ color: 0x33372e, roughness: 0.9 });
+  const wallSlab = new THREE.Mesh(new THREE.BoxGeometry(7.4, 3.0, 0.3), wallMat);
+  wallSlab.position.set(4.0, 1.5, -4.6);
+  wallSlab.castShadow = true;
+  wallSlab.receiveShadow = true;
+  group.add(wallSlab);
+  
+  scene.add(group);
+  return group;
+}
+
+function buildCommercialBackdrop(scene) {
+  const group = new THREE.Group();
+  
+  // Ground (gravel/concrete pad)
+  const padMat = new THREE.MeshStandardMaterial({ color: 0x4a4a42, roughness: 0.95 });
+  const pad = new THREE.Mesh(new THREE.PlaneGeometry(30, 20), padMat);
+  pad.rotation.x = -Math.PI / 2;
+  pad.position.y = 0.01;
+  pad.receiveShadow = true;
+  group.add(pad);
+  
+  // Chain-link fence outline
+  const fenceMat = new THREE.MeshStandardMaterial({ color: 0x3a3a32, roughness: 0.7, metalness: 0.5 });
+  
+  // Fence posts
+  for (let i = -12; i <= 12; i += 2) {
+    const post = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.0, 0.08), fenceMat);
+    post.position.set(i, 1.0, -10);
+    post.castShadow = true;
+    group.add(post);
+  }
+  
+  // Equipment shed
+  const shedMat = new THREE.MeshStandardMaterial({ color: 0x2a2d28, roughness: 0.8 });
+  const shed = new THREE.Mesh(new THREE.BoxGeometry(5, 3, 4), shedMat);
+  shed.position.set(-8, 1.5, -8);
+  shed.castShadow = true;
+  shed.receiveShadow = true;
+  group.add(shed);
+  
+  // Shed roof
+  const shedRoof = new THREE.Mesh(new THREE.BoxGeometry(5.4, 0.2, 4.4), fenceMat);
+  shedRoof.position.set(-8, 3.1, -8);
+  shedRoof.castShadow = true;
+  group.add(shedRoof);
+  
+  scene.add(group);
+  return group;
+}
+
+function buildUtilityBackdrop(scene) {
+  const group = new THREE.Group();
+  
+  // Open field ground
+  const fieldMat = new THREE.MeshStandardMaterial({ color: 0x2d3028, roughness: 1.0 });
+  const field = new THREE.Mesh(new THREE.PlaneGeometry(100, 80), fieldMat);
+  field.rotation.x = -Math.PI / 2;
+  field.receiveShadow = true;
+  group.add(field);
+  
+  // Tree line silhouette (horizon)
+  const treeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a18, roughness: 1.0 });
+  for (let x = -40; x <= 40; x += 2) {
+    const height = 3 + Math.random() * 4;
+    const tree = new THREE.Mesh(new THREE.ConeGeometry(1.5, height, 6), treeMat);
+    tree.position.set(x + Math.random() * 0.5, height / 2, -35);
+    group.add(tree);
+  }
+  
+  // Gravel access road
+  const roadMat = new THREE.MeshStandardMaterial({ color: 0x3a3a32, roughness: 0.9 });
+  const road = new THREE.Mesh(new THREE.PlaneGeometry(6, 60), roadMat);
+  road.rotation.x = -Math.PI / 2;
+  road.position.set(20, 0.02, 0);
+  road.receiveShadow = true;
+  group.add(road);
+  
+  scene.add(group);
+  return group;
+}
+
 export function useThreeScene() {
   const canvasRef = useRef(null);
   const sceneRef = useRef(null);
@@ -15,6 +122,9 @@ export function useThreeScene() {
   const terminalRegistryRef = useRef({});
   const wiresGroupRef = useRef(null);
   const fxLayerRef = useRef(null);
+  const backgroundGroupRef = useRef(null);
+  const currentBackdropRef = useRef('residential');
+  const backdropObjectsRef = useRef([]);
   const particlesRef = useRef([]);
   const scorchPlanesRef = useRef([]);
   
@@ -94,176 +204,108 @@ export function useThreeScene() {
   }, []);
 
   // Layered panel texture generation
-  const makePanelTextures = useCallback((cols, rows) => {
-    // Use a higher resolution canvas for better quality
-    const SIZE = 1024;
-    const cellWidth = SIZE / cols;
-    const cellHeight = SIZE / rows;
+  // Load the reference photo as panel texture
+  const loadPanelTexture = useCallback(() => {
+    if (panelTextureRef) return panelTextureRef;
     
-    // === DIFFUSE MAP ===
-    const diffuseCanvas = document.createElement('canvas');
-    diffuseCanvas.width = SIZE;
-    diffuseCanvas.height = SIZE;
-    const dctx = diffuseCanvas.getContext('2d');
+    // Try to load the reference image
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      '/src/assets/textures/panel-reference.jpg',
+      (texture) => {
+        panelTextureRef = texture;
+        texture.wrapS = THREE.RepeatWrapping;
+        texture.wrapT = THREE.RepeatWrapping;
+        texture.colorSpace = THREE.SRGBColorSpace;
+      },
+      undefined,
+      (error) => {
+        console.warn('Panel reference image not found, using procedural fallback');
+        // Will use procedural fallback
+      }
+    );
+    return null;
+  }, []);
+
+  // Generate procedural panel texture as fallback (tiled cell pattern)
+  const makePanelTexture = useCallback((cols, rows) => {
+    const SIZE = 512;
+    const canvas = document.createElement('canvas');
+    canvas.width = SIZE;
+    canvas.height = SIZE;
+    const ctx = canvas.getContext('2d');
     
-    // Base cell color - dark blue-black as specified
-    dctx.fillStyle = '#0a0a0d';
-    dctx.fillRect(0, 0, SIZE, SIZE);
+    // Base cell color - dark
+    ctx.fillStyle = '#0a0a0d';
+    ctx.fillRect(0, 0, SIZE, SIZE);
     
-    // Cell variation - subtle gradient within each cell
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const x = col * cellWidth;
-        const y = row * cellHeight;
-        
-        // Subtle cell-to-cell variation
+    const cellW = SIZE / cols;
+    const cellH = SIZE / rows;
+    
+    // Cell fill with subtle variation
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
         const brightness = 0.92 + Math.random() * 0.08;
-        const r = Math.floor(10 * brightness);
-        const g = Math.floor(10 * brightness);
-        const b = Math.floor(13 * brightness);
-        
-        dctx.fillStyle = `rgb(${r},${g},${b})`;
-        dctx.fillRect(x + 1, y + 1, cellWidth - 2, cellHeight - 2);
+        ctx.fillStyle = `rgb(${Math.floor(10 * brightness)},${Math.floor(10 * brightness)},${Math.floor(13 * brightness)})`;
+        ctx.fillRect(c * cellW + 1, r * cellH + 1, cellW - 2, cellH - 2);
       }
     }
     
-    // Fine busbar lines (very thin, ~1px at this scale) - soft grey
-    dctx.strokeStyle = 'rgba(74, 77, 82, 0.4)';
-    dctx.lineWidth = 1;
+    // Fine busbar lines
+    ctx.strokeStyle = 'rgba(74, 77, 82, 0.35)';
+    ctx.lineWidth = 0.5;
     
-    // Vertical busbars (multiple thin lines per cell)
-    for (let col = 0; col < cols; col++) {
-      const baseX = col * cellWidth;
+    // Vertical busbars
+    for (let c = 0; c < cols; c++) {
       for (let i = 1; i <= 11; i++) {
-        const x = baseX + (i / 12) * cellWidth;
-        dctx.beginPath();
-        dctx.moveTo(x, 0);
-        dctx.lineTo(x, SIZE);
-        dctx.stroke();
+        const x = c * cellW + (i / 12) * cellW;
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, SIZE);
+        ctx.stroke();
       }
     }
     
     // Horizontal busbars
-    for (let row = 0; row < rows; row++) {
-      const baseY = row * cellHeight;
+    for (let r = 0; r < rows; r++) {
       for (let i = 1; i <= 3; i++) {
-        const y = baseY + (i / 4) * cellHeight;
-        dctx.beginPath();
-        dctx.moveTo(0, y);
-        dctx.lineTo(SIZE, y);
-        dctx.stroke();
+        const y = r * cellH + (i / 4) * cellH;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(SIZE, y);
+        ctx.stroke();
       }
     }
     
-    // Cell gap lines (slightly darker to create separation)
-    dctx.strokeStyle = 'rgba(5, 5, 6, 0.8)';
-    dctx.lineWidth = 2;
-    for (let col = 0; col <= cols; col++) {
-      const x = col * cellWidth;
-      dctx.beginPath();
-      dctx.moveTo(x, 0);
-      dctx.lineTo(x, SIZE);
-      dctx.stroke();
+    // Cell gap lines
+    ctx.strokeStyle = 'rgba(5, 5, 6, 0.8)';
+    ctx.lineWidth = 2;
+    for (let c = 0; c <= cols; c++) {
+      ctx.beginPath();
+      ctx.moveTo(c * cellW, 0);
+      ctx.lineTo(c * cellW, SIZE);
+      ctx.stroke();
     }
-    for (let row = 0; row <= rows; row++) {
-      const y = row * cellHeight;
-      dctx.beginPath();
-      dctx.moveTo(0, y);
-      dctx.lineTo(SIZE, y);
-      dctx.stroke();
+    for (let r = 0; r <= rows; r++) {
+      ctx.beginPath();
+      ctx.moveTo(0, r * cellH);
+      ctx.lineTo(SIZE, r * cellH);
+      ctx.stroke();
     }
     
-    // Glass reflection gradient (subtle highlight)
-    const glassGrad = dctx.createLinearGradient(0, 0, SIZE * 0.3, SIZE * 0.3);
-    glassGrad.addColorStop(0, 'rgba(255,255,255,0.12)');
-    glassGrad.addColorStop(0.5, 'rgba(255,255,255,0)');
-    dctx.fillStyle = glassGrad;
-    dctx.fillRect(0, 0, SIZE, SIZE);
+    // Glass reflection
+    const grad = ctx.createLinearGradient(0, 0, SIZE * 0.3, SIZE * 0.3);
+    grad.addColorStop(0, 'rgba(255,255,255,0.1)');
+    grad.addColorStop(0.5, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, SIZE, SIZE);
     
-    const diffuseTex = new THREE.CanvasTexture(diffuseCanvas);
-    diffuseTex.colorSpace = THREE.SRGBColorSpace;
-    diffuseTex.wrapS = THREE.RepeatWrapping;
-    diffuseTex.wrapT = THREE.RepeatWrapping;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.colorSpace = THREE.SRGBColorSpace;
     
-    // === ROUGHNESS MAP ===
-    const roughnessCanvas = document.createElement('canvas');
-    roughnessCanvas.width = SIZE;
-    roughnessCanvas.height = SIZE;
-    const rctx = roughnessCanvas.getContext('2d');
-    
-    // Base roughness - low (coated glass appearance)
-    rctx.fillStyle = 'rgb(30, 30, 30)'; // ~0.12 roughness
-    rctx.fillRect(0, 0, SIZE, SIZE);
-    
-    // Slightly higher roughness at cell gaps
-    rctx.strokeStyle = 'rgb(60, 60, 60)'; // ~0.24 roughness at gaps
-    rctx.lineWidth = 4;
-    for (let col = 0; col <= cols; col++) {
-      const x = col * cellWidth;
-      rctx.beginPath();
-      rctx.moveTo(x, 0);
-      rctx.lineTo(x, SIZE);
-      rctx.stroke();
-    }
-    for (let row = 0; row <= rows; row++) {
-      const y = row * cellHeight;
-      rctx.beginPath();
-      rctx.moveTo(0, y);
-      rctx.lineTo(SIZE, y);
-      rctx.stroke();
-    }
-    
-    const roughnessTex = new THREE.CanvasTexture(roughnessCanvas);
-    roughnessTex.wrapS = THREE.RepeatWrapping;
-    roughnessTex.wrapT = THREE.RepeatWrapping;
-    
-    // === BUMP MAP ===
-    const bumpCanvas = document.createElement('canvas');
-    bumpCanvas.width = SIZE;
-    bumpCanvas.height = SIZE;
-    const bctx = bumpCanvas.getContext('2d');
-    
-    // Base bump - neutral
-    bctx.fillStyle = 'rgb(128, 128, 128)';
-    bctx.fillRect(0, 0, SIZE, SIZE);
-    
-    // Cell gap grooves (darker = lower = groove)
-    bctx.strokeStyle = 'rgb(80, 80, 80)';
-    bctx.lineWidth = 3;
-    for (let col = 0; col <= cols; col++) {
-      const x = col * cellWidth;
-      bctx.beginPath();
-      bctx.moveTo(x, 0);
-      bctx.lineTo(x, SIZE);
-      bctx.stroke();
-    }
-    for (let row = 0; row <= rows; row++) {
-      const y = row * cellHeight;
-      bctx.beginPath();
-      bctx.moveTo(0, y);
-      bctx.lineTo(SIZE, y);
-      bctx.stroke();
-    }
-    
-    // Busbar ridges (lighter = higher)
-    bctx.strokeStyle = 'rgb(160, 160, 160)';
-    bctx.lineWidth = 1;
-    for (let col = 0; col < cols; col++) {
-      const baseX = col * cellWidth;
-      for (let i = 1; i <= 11; i++) {
-        const x = baseX + (i / 12) * cellWidth;
-        bctx.beginPath();
-        bctx.moveTo(x, 0);
-        bctx.lineTo(x, SIZE);
-        bctx.stroke();
-      }
-    }
-    
-    const bumpTex = new THREE.CanvasTexture(bumpCanvas);
-    bumpTex.wrapS = THREE.RepeatWrapping;
-    bumpTex.wrapT = THREE.RepeatWrapping;
-    
-    return { diffuse: diffuseTex, roughness: roughnessTex, bump: bumpTex };
+    return texture;
   }, []);
 
   const makeBatteryLabel = useCallback(() => {
@@ -322,212 +364,284 @@ export function useThreeScene() {
   }, []);
 
   // Model builders
-  const buildPanel = useCallback((specs) => {
-    const g = new THREE.Group();
-    
+  // Build a single panel mesh (for use in arrays)
+  const buildSinglePanel = useCallback((specs, texture, cols, rows) => {
     // Get dimensions based on specs (in mm, convert to meters)
-    // 400W: 1855×1029mm, 550W: 2274×1134mm, 650W: 2382×1134mm
-    const width = specs ? specs.dimensions[0] / 1000 : 1.855; // default 400W
+    const width = specs ? specs.dimensions[0] / 1000 : 1.855;
     const height = specs ? specs.dimensions[1] / 1000 : 1.029;
     
-    // Scale factor to keep consistent visual size
-    const scaleX = width / 1.855;
-    const scaleY = height / 1.029;
-    
-    // Frame thickness
     const frameThick = 0.04;
     const frameDepth = 0.03;
-    
-    // Material colors
     const frameColor = 0xb8bdb8;
     const frameInnerColor = 0x8a8f88;
     
-    // === LEGS ===
-    const legMat = new THREE.MeshStandardMaterial({ color: 0x8a8f88, roughness: 0.5, metalness: 0.6 });
-    const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.12, 1.4, 0.12), legMat);
-    leg1.position.set(-width * 0.35, 0.7, 0.55);
-    leg1.rotation.x = -0.35;
-    leg1.castShadow = true;
-    const leg2 = leg1.clone();
-    leg2.position.x = width * 0.35;
-    g.add(leg1, leg2);
+    const panelGroup = new THREE.Group();
     
-    // === FRAME (outer) ===
-    const frameMat = new THREE.MeshStandardMaterial({ 
-      color: frameColor, 
-      roughness: 0.35, 
-      metalness: 0.75 
-    });
+    // Frame
+    const frameMat = new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.35, metalness: 0.75 });
     
-    // Create frame as a hollow box (using multiple planes)
-    const frameGroup = new THREE.Group();
-    
-    // Top frame
-    const topFrame = new THREE.Mesh(
-      new THREE.BoxGeometry(width + frameThick * 2, frameThick, frameDepth),
-      frameMat
-    );
+    const topFrame = new THREE.Mesh(new THREE.BoxGeometry(width + frameThick * 2, frameThick, frameDepth), frameMat);
     topFrame.position.set(0, height / 2 + frameThick / 2, 0);
     topFrame.castShadow = true;
-    frameGroup.add(topFrame);
+    panelGroup.add(topFrame);
     
-    // Bottom frame
     const bottomFrame = topFrame.clone();
     bottomFrame.position.y = -(height / 2 + frameThick / 2);
-    frameGroup.add(bottomFrame);
+    panelGroup.add(bottomFrame);
     
-    // Left frame
-    const leftFrame = new THREE.Mesh(
-      new THREE.BoxGeometry(frameThick, height, frameDepth),
-      frameMat
-    );
+    const leftFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThick, height, frameDepth), frameMat);
     leftFrame.position.set(-(width / 2 + frameThick / 2), 0, 0);
     leftFrame.castShadow = true;
-    frameGroup.add(leftFrame);
+    panelGroup.add(leftFrame);
     
-    // Right frame
     const rightFrame = leftFrame.clone();
     rightFrame.position.x = width / 2 + frameThick / 2;
-    frameGroup.add(rightFrame);
+    panelGroup.add(rightFrame);
     
-    // === INNER FRAME (inset line) ===
-    const innerFrameMat = new THREE.MeshStandardMaterial({ 
-      color: frameInnerColor, 
-      roughness: 0.4, 
-      metalness: 0.7 
-    });
-    const innerInset = 0.012; // 12mm inset
-    const innerThick = 0.008; // 8mm thick inset line
+    // Inner frame inset
+    const innerFrameMat = new THREE.MeshStandardMaterial({ color: frameInnerColor, roughness: 0.4, metalness: 0.7 });
+    const innerInset = 0.012;
+    const innerThick = 0.008;
     
-    const innerFrameGroup = new THREE.Group();
-    
-    // Inner top
     const innerTop = new THREE.Mesh(
-      new THREE.BoxGeometry(width - innerInset * 2, innerThick, frameDepth * 0.3),
-      innerFrameMat
-    );
+      new THREE.BoxGeometry(width - innerInset * 2, innerThick, frameDepth * 0.3), innerFrameMat);
     innerTop.position.set(0, height / 2 - innerInset - innerThick / 2, frameDepth * 0.15);
-    innerFrameGroup.add(innerTop);
+    panelGroup.add(innerTop);
+    innerTop.clone().position.y = -(height / 2 - innerInset - innerThick / 2);
+    panelGroup.add(innerTop.clone());
     
-    // Inner bottom
-    const innerBottom = innerTop.clone();
-    innerBottom.position.y = -(height / 2 - innerInset - innerThick / 2);
-    innerFrameGroup.add(innerBottom);
-    
-    // Inner left
     const innerLeft = new THREE.Mesh(
-      new THREE.BoxGeometry(innerThick, height - innerInset * 2 - innerThick * 2, frameDepth * 0.3),
-      innerFrameMat
-    );
+      new THREE.BoxGeometry(innerThick, height - innerInset * 2 - innerThick * 2, frameDepth * 0.3), innerFrameMat);
     innerLeft.position.set(-(width / 2 - innerInset - innerThick / 2), 0, frameDepth * 0.15);
-    innerFrameGroup.add(innerLeft);
+    panelGroup.add(innerLeft);
+    innerLeft.clone().position.x = width / 2 - innerInset - innerThick / 2;
+    panelGroup.add(innerLeft.clone());
     
-    // Inner right
-    const innerRight = innerLeft.clone();
-    innerRight.position.x = width / 2 - innerInset - innerThick / 2;
-    innerFrameGroup.add(innerRight);
-    
-    // === CELL SURFACE ===
-    // Calculate cell grid based on aspect ratio
-    // 400W: ~6×10 cells, 550W/650W: taller aspect ratio
-    const cellAspect = width / height;
-    let cols, rows;
-    if (cellAspect > 1.8) {
-      // 550W/650W: wider panels have more columns
-      cols = 12;
-      rows = Math.round(12 / cellAspect * 1.5);
-    } else {
-      // 400W: more square
-      cols = 10;
-      rows = 6;
-    }
-    
-    const textures = makePanelTextures(cols, rows);
-    
+    // Cell surface with texture
     const cellMat = new THREE.MeshStandardMaterial({
-      map: textures.diffuse,
-      roughnessMap: textures.roughness,
-      bumpMap: textures.bump,
-      bumpScale: 0.02,
+      map: texture,
       roughness: 0.15,
       metalness: 0.1
     });
+    // Set texture repeat for tiling
+    texture.repeat.set(cols, rows);
     
     const cellSurface = new THREE.Mesh(
       new THREE.PlaneGeometry(width - frameThick * 2, height - frameThick * 2),
       cellMat
     );
     cellSurface.rotation.x = -Math.PI / 2;
-    cellSurface.position.y = 0.001; // Just above frame
+    cellSurface.position.y = 0.001;
     cellSurface.receiveShadow = true;
+    panelGroup.add(cellSurface);
     
-    // === CROSSBAR ===
-    const crossbarMat = new THREE.MeshStandardMaterial({ 
-      color: frameColor, 
-      roughness: 0.35, 
-      metalness: 0.75 
-    });
+    // Crossbar (horizontal split bar)
+    const crossbarMat = new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.35, metalness: 0.75 });
     const crossbar = new THREE.Mesh(
       new THREE.BoxGeometry(width - frameThick * 2, 0.025, 0.015),
       crossbarMat
     );
     crossbar.position.set(0, 0, frameDepth * 0.5 + 0.008);
     crossbar.castShadow = true;
-    
-    // === MOUNTING HOLES ===
-    const holeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
-    const holeRadius = 0.015;
-    const holePositions = [
-      [-width * 0.35, height * 0.35],
-      [width * 0.35, height * 0.35],
-      [-width * 0.35, -height * 0.35],
-      [width * 0.35, -height * 0.35],
-    ];
-    
-    // === ASSEMBLE PANEL GROUP ===
-    const panelGroup = new THREE.Group();
-    panelGroup.add(frameGroup);
-    panelGroup.add(innerFrameGroup);
-    panelGroup.add(cellSurface);
     panelGroup.add(crossbar);
     
-    // Add mounting holes
-    holePositions.forEach(([x, y]) => {
+    // Mounting holes
+    const holeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
+    [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sy]) => {
       const hole = new THREE.Mesh(
-        new THREE.CylinderGeometry(holeRadius, holeRadius, frameDepth * 1.5, 12),
-        holeMat
-      );
+        new THREE.CylinderGeometry(0.015, 0.015, frameDepth * 1.5, 12), holeMat);
       hole.rotation.x = Math.PI / 2;
-      hole.position.set(x, y, 0);
+      hole.position.set(sx * width * 0.35, sy * height * 0.35, 0);
       panelGroup.add(hole);
     });
     
-    // Position and tilt the panel
-    panelGroup.position.set(0, height / 2 + 0.4, -0.05);
+    // Tilt the panel
     panelGroup.rotation.x = -0.5;
-    g.add(panelGroup);
     
-    // === JUNCTION BOX ===
-    const jbox = new THREE.Mesh(
-      new THREE.BoxGeometry(0.4, 0.14, 0.14),
-      new THREE.MeshStandardMaterial({ color: 0x1c1e19 })
+    return panelGroup;
+  }, []);
+
+  // Build jumper cable (MC4-style connector cable)
+  const makeJumperCable = useCallback((startPos, endPos, isPositive) => {
+    const cableGroup = new THREE.Group();
+    
+    const cableMat = new THREE.MeshStandardMaterial({
+      color: isPositive ? 0xe8503a : 0x1a1a1a,
+      roughness: 0.6,
+      metalness: 0.2
+    });
+    
+    // Cable path (curved)
+    const midX = (startPos.x + endPos.x) / 2;
+    const midZ = (startPos.z + endPos.z) / 2 - 0.3; // sag
+    const cableGeo = new THREE.TubeGeometry(
+      new THREE.CatmullRomCurve3([
+        new THREE.Vector3(startPos.x, startPos.y, startPos.z),
+        new THREE.Vector3(midX, startPos.y + 0.1, midZ),
+        new THREE.Vector3(endPos.x, endPos.y, endPos.z)
+      ]),
+      20, 0.02, 8, false
     );
-    jbox.position.set(0, height / 2 + 0.1, 0.62);
-    g.add(jbox);
     
-    // === TERMINALS ===
-    const tPos = makeTerminal('p_pos', RED);
-    tPos.position.set(-0.16, height / 2 + 0.1, 0.72);
-    const tNeg = makeTerminal('p_neg', BLACK);
-    tNeg.position.set(0.16, height / 2 + 0.1, 0.72);
-    g.add(tPos, tNeg);
+    const cable = new THREE.Mesh(cableGeo, cableMat);
+    cable.castShadow = true;
+    cableGroup.add(cable);
     
-    g.userData.terminals = { p_pos: tPos, p_neg: tNeg };
-    g.userData.paintables = [frameMat, cellMat, legMat];
+    // MC4 connector at each end
+    const connMat = new THREE.MeshStandardMaterial({ color: 0x4a4a42, roughness: 0.5, metalness: 0.4 });
+    [startPos, endPos].forEach(pos => {
+      const conn = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.06, 8), connMat);
+      conn.position.copy(pos);
+      conn.rotation.x = Math.PI / 2;
+      cableGroup.add(conn);
+    });
+    
+    return cableGroup;
+  }, []);
+
+  // Build combiner box
+  const makeCombinerBox = useCallback((position) => {
+    const boxGroup = new THREE.Group();
+    
+    const boxMat = new THREE.MeshStandardMaterial({ color: 0x2a2d28, roughness: 0.7, metalness: 0.3 });
+    const box = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.2), boxMat);
+    box.position.copy(position);
+    box.castShadow = true;
+    boxGroup.add(box);
+    
+    // Terminal block indicator
+    const termMat = new THREE.MeshStandardMaterial({ color: 0x1a1a18, roughness: 0.8 });
+    const termBlock = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.1, 0.05), termMat);
+    termBlock.position.set(position.x, position.y, position.z + 0.13);
+    boxGroup.add(termBlock);
+    
+    return boxGroup;
+  }, []);
+
+  // Build complete panel array with series/parallel layout
+  const buildPanel = useCallback((specs, seriesCount = 1, parallelCount = 1) => {
+    const g = new THREE.Group();
+    
+    // Get panel dimensions
+    const width = specs ? specs.dimensions[0] / 1000 : 1.855;
+    const height = specs ? specs.dimensions[1] / 1000 : 1.029;
+    const frameGap = 0.02; // 20mm gap between panels
+    
+    // Get or create texture
+    const texture = panelTextureRef || makePanelTexture(10, 6);
+    
+    // Calculate cell grid based on aspect ratio
+    const cellAspect = width / height;
+    let cols, rows;
+    if (cellAspect > 1.8) {
+      cols = 12;
+      rows = Math.round(12 / cellAspect * 1.5);
+    } else {
+      cols = 10;
+      rows = 6;
+    }
+    
+    // Panel array dimensions
+    const arrayWidth = seriesCount * (width + frameGap);
+    const arrayDepth = parallelCount * (height * Math.cos(0.5) + frameGap);
+    
+    // Build legs (two support structures at ends)
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x8a8f88, roughness: 0.5, metalness: 0.6 });
+    const legHeight = 1.2;
+    
+    const leg1 = new THREE.Mesh(new THREE.BoxGeometry(0.15, legHeight, 0.15), legMat);
+    leg1.position.set(-arrayWidth / 2 + 0.2, legHeight / 2, 0.8);
+    leg1.castShadow = true;
+    g.add(leg1);
+    
+    const leg2 = leg1.clone();
+    leg2.position.x = arrayWidth / 2 - 0.2;
+    g.add(leg2);
+    
+    // Build panel grid
+    const panelPositions = [];
+    const terminals = {};
+    const cables = [];
+    
+    for (let p = 0; p < parallelCount; p++) {
+      for (let s = 0; s < seriesCount; s++) {
+        const x = s * (width + frameGap) - arrayWidth / 2 + width / 2;
+        const z = p * (height * Math.cos(0.5) + frameGap) + 0.3;
+        
+        const panel = buildSinglePanel(specs, texture, cols, rows);
+        panel.position.set(x, height / 2 + 0.4, z);
+        g.add(panel);
+        
+        panelPositions.push({ x, z, panel });
+        
+        // Only first panel in each row needs external terminals
+        if (s === 0) {
+          const tPos = makeTerminal('p_pos', RED);
+          tPos.position.set(x - width / 2 - 0.1, height / 2 + 0.5, z + 0.35);
+          g.add(tPos);
+          terminals.p_pos = tPos;
+        }
+        
+        // Last panel in each row has negative terminal
+        if (s === seriesCount - 1) {
+          const tNeg = makeTerminal('p_neg', BLACK);
+          tNeg.position.set(x + width / 2 + 0.1, height / 2 + 0.5, z + 0.35);
+          g.add(tNeg);
+          terminals.p_neg = tNeg;
+        }
+        
+        // Add jumper cables between series panels
+        if (s > 0) {
+          const prevX = (s - 1) * (width + frameGap) - arrayWidth / 2 + width / 2;
+          cables.push({
+            start: { x: prevX + width / 2, y: height / 2 + 0.45, z: z + 0.1 },
+            end: { x: x - width / 2, y: height / 2 + 0.45, z: z + 0.1 },
+            isPositive: false
+          });
+        }
+      }
+    }
+    
+    // Add jumper cables
+    cables.forEach(c => {
+      const cable = makeJumperCable(
+        new THREE.Vector3(c.start.x, c.start.y, c.start.z),
+        new THREE.Vector3(c.end.x, c.end.y, c.end.z),
+        c.isPositive
+      );
+      g.add(cable);
+    });
+    
+    // Combiner box at the end of the array
+    const combinerPos = new THREE.Vector3(
+      arrayWidth / 2 + 0.5,
+      height / 2 + 0.6,
+      0
+    );
+    const combiner = makeCombinerBox(combinerPos);
+    g.add(combiner);
+    
+    // Cables from last panel to combiner
+    panelPositions.forEach((pos, idx) => {
+      const isLastInRow = (idx + 1) % seriesCount === 0;
+      if (isLastInRow) {
+        const cable = makeJumperCable(
+          new THREE.Vector3(pos.x + width / 2, height / 2 + 0.45, pos.z + 0.1),
+          new THREE.Vector3(combinerPos.x - 0.2, combinerPos.y, combinerPos.z),
+          false
+        );
+        g.add(cable);
+      }
+    });
+    
+    // Store array configuration
+    g.userData.seriesCount = seriesCount;
+    g.userData.parallelCount = parallelCount;
+    g.userData.terminals = terminals;
     g.userData.panelSpecs = specs;
     
     return g;
-  }, [makePanelTextures, makeTerminal]);
+  }, [makePanelTexture, buildSinglePanel, makeTerminal, makeJumperCable, makeCombinerBox]);
 
   const buildController = useCallback(() => {
     const g = new THREE.Group();
@@ -720,28 +834,14 @@ export function useThreeScene() {
     ground.receiveShadow = true;
     scene.add(ground);
 
-    // House
-    const houseMat = new THREE.MeshStandardMaterial({ color: 0x3a3f35, roughness: 0.9 });
-    const houseBody = new THREE.Mesh(new THREE.BoxGeometry(6.2, 2.6, 2.2), houseMat);
-    houseBody.position.set(-4.3, 1.3, -5.6);
-    houseBody.castShadow = true;
-    houseBody.receiveShadow = true;
-    scene.add(houseBody);
+    // Background management
+    const backgroundGroup = new THREE.Group();
+    scene.add(backgroundGroup);
+    backgroundGroupRef.current = backgroundGroup;
     
-    const roofMat = new THREE.MeshStandardMaterial({ color: 0x5a4133, roughness: 0.85 });
-    const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.25, 3.6), roofMat);
-    roofSlab.position.set(-4.3, 2.75, -4.3);
-    roofSlab.rotation.x = -0.28;
-    roofSlab.castShadow = true;
-    roofSlab.receiveShadow = true;
-    scene.add(roofSlab);
-    
-    const wallMat = new THREE.MeshStandardMaterial({ color: 0x33372e, roughness: 0.9 });
-    const wallSlab = new THREE.Mesh(new THREE.BoxGeometry(7.4, 3.0, 0.3), wallMat);
-    wallSlab.position.set(4.0, 1.5, -4.6);
-    wallSlab.castShadow = true;
-    wallSlab.receiveShadow = true;
-    scene.add(wallSlab);
+    // Default to residential backdrop
+    buildResidentialBackdrop(scene);
+    currentBackdropRef.current = 'residential';
 
     // Groups
     const wiresGroup = new THREE.Group();
@@ -800,12 +900,12 @@ export function useThreeScene() {
     };
   }, [makeGroundTexture]);
 
-  const placeComponent = useCallback((type, x, z, onPlaced, specs) => {
+  const placeComponent = useCallback((type, x, z, onPlaced, specs, seriesCount, parallelCount) => {
     if (!sceneRef.current) return;
     
-    // Pass specs to panel builder
+    // Pass specs and array config to panel builder
     const group = type === 'panel' && specs 
-      ? BUILDERS[type](specs) 
+      ? BUILDERS[type](specs, seriesCount, parallelCount) 
       : BUILDERS[type]();
     
     group.position.set(x, 0, z);
@@ -1072,6 +1172,82 @@ export function useThreeScene() {
     mesh.scale.setScalar(1);
   }, []);
 
+  // Set background tier based on panel count
+  const setBackground = useCallback((panelCount, arrayWidth, arrayDepth) => {
+    const scene = sceneRef.current;
+    const camera = cameraRef.current;
+    const controls = controlsRef.current;
+    if (!scene || !camera || !controls) return;
+    
+    // Determine tier
+    let tier;
+    if (panelCount <= 10) tier = 'residential';
+    else if (panelCount <= 50) tier = 'commercial';
+    else tier = 'utility';
+    
+    // Only rebuild if tier changed
+    if (currentBackdropRef.current === tier) {
+      // Just adjust camera
+      fitCameraToArray(camera, controls, arrayWidth, arrayDepth, tier);
+      return;
+    }
+    
+    // Remove old backdrop objects
+    backdropObjectsRef.current.forEach(obj => scene.remove(obj));
+    backdropObjectsRef.current = [];
+    
+    // Build new backdrop
+    if (tier === 'residential') {
+      buildResidentialBackdrop(scene);
+    } else if (tier === 'commercial') {
+      buildCommercialBackdrop(scene);
+    } else {
+      buildUtilityBackdrop(scene);
+    }
+    
+    currentBackdropRef.current = tier;
+    
+    // Adjust camera for new tier
+    fitCameraToArray(camera, controls, arrayWidth, arrayDepth, tier);
+  }, []);
+
+  // Fit camera to array bounding box
+  const fitCameraToArray = (camera, controls, width, depth, tier) => {
+    // Calculate appropriate distance based on array size
+    let distance, targetY;
+    
+    if (tier === 'residential') {
+      distance = 18;
+      targetY = 2;
+    } else if (tier === 'commercial') {
+      distance = 30;
+      targetY = 3;
+    } else {
+      distance = 60;
+      targetY = 5;
+    }
+    
+    // Animate camera
+    const startPos = camera.position.clone();
+    const endPos = new THREE.Vector3(distance * 0.7, distance * 0.5, distance);
+    const duration = 1000;
+    const startTime = Date.now();
+    
+    const animateCamera = () => {
+      const elapsed = Date.now() - startTime;
+      const t = Math.min(elapsed / duration, 1);
+      const ease = 1 - Math.pow(1 - t, 3); // ease out cubic
+      
+      camera.position.lerpVectors(startPos, endPos, ease);
+      controls.target.set(0, targetY, 0);
+      controls.update();
+      
+      if (t < 1) requestAnimationFrame(animateCamera);
+    };
+    
+    animateCamera();
+  };
+
   return {
     canvasRef,
     badgeText,
@@ -1086,6 +1262,7 @@ export function useThreeScene() {
     handleTerminalTap,
     selectTerminal,
     deselectTerminal,
-    resetTerminal
+    resetTerminal,
+    setBackground
   };
 }

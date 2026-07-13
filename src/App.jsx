@@ -54,7 +54,8 @@ function App() {
     handleTerminalTap,
     selectTerminal,
     deselectTerminal,
-    resetTerminal
+    resetTerminal,
+    setBackground
   } = useThreeScene();
 
   // Get current panel specs
@@ -331,10 +332,24 @@ function App() {
   const handleTrayClick = useCallback((type) => {
     if (placed[type]) return;
     const zone = ZONES[type];
-    // Pass panel specs when placing the panel
-    const specs = type === 'panel' ? currentSpecs : null;
-    placeComponent(type, zone.x, zone.z, handlePlaced, specs);
-  }, [placed, placeComponent, handlePlaced, currentSpecs]);
+    
+    if (type === 'panel') {
+      const specs = currentSpecs;
+      const seriesCount = panelSelection.seriesCount;
+      const parallelCount = panelSelection.parallelCount;
+      
+      // Pass panel specs and array config
+      placeComponent(type, zone.x, zone.z, handlePlaced, specs, seriesCount, parallelCount);
+      
+      // Update background based on total panel count
+      const totalPanels = seriesCount * parallelCount;
+      const width = specs ? (specs.dimensions[0] / 1000) * seriesCount : 1.855 * seriesCount;
+      const depth = specs ? (specs.dimensions[1] / 1000) * parallelCount : 1.029 * parallelCount;
+      setBackground(totalPanels, width, depth);
+    } else {
+      placeComponent(type, zone.x, zone.z, handlePlaced);
+    }
+  }, [placed, placeComponent, handlePlaced, currentSpecs, panelSelection, setBackground]);
 
   // Reset
   const handleReset = useCallback(() => {
