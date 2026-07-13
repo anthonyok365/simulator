@@ -1,6 +1,15 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useThreeScene } from './hooks/useThreeScene';
-import { PANEL_SPEC, CTRL_MAX_VOC, INV_MIN_V, INV_MAX_V, OWNER, GROUP, ZONES, LABEL_MAP, NICE_NAMES } from './utils/constants';
+import { INV_MIN_V, INV_MAX_V, OWNER, GROUP, ZONES, LABEL_MAP, NICE_NAMES } from './utils/constants';
+import { 
+  PANEL_CATALOG, 
+  CONTROLLER_SPEC, 
+  getManufacturers, 
+  getProducts, 
+  getProductSpecs,
+  computeArray,
+  DEFAULT_SELECTION 
+} from './utils/panelCatalog';
 
 function App() {
   const [placed, setPlaced] = useState({
@@ -17,12 +26,16 @@ function App() {
   const [connections, setConnections] = useState([]);
   const [selectedTerminal, setSelectedTerminal] = useState(null);
   const [noted, setNoted] = useState(new Set());
-  const [seriesCount, setSeriesCount] = useState(1);
   const [scenario, setScenario] = useState('');
   const [logs, setLogs] = useState([]);
   const [flashActive, setFlashActive] = useState(false);
   const [flashGood, setFlashGood] = useState(false);
   const [wasFullyCorrect, setWasFullyCorrect] = useState(false);
+
+  // Panel selection state
+  const [panelSelection, setPanelSelection] = useState(DEFAULT_SELECTION);
+  const [panelSelectionStep, setPanelSelectionStep] = useState(0); // 0=manufacturer, 1=wattage, 2=counts
+  const [panelDestroyed, setPanelDestroyed] = useState(false);
 
   const downPosRef = useRef(null);
   const downTimeRef = useRef(0);
@@ -44,7 +57,21 @@ function App() {
     resetTerminal
   } = useThreeScene();
 
-  const arrayVoc = useCallback(() => +(PANEL_SPEC.voc * seriesCount).toFixed(1), [seriesCount]);
+  // Get current panel specs
+  const currentSpecs = useMemo(() => {
+    return getProductSpecs(panelSelection.manufacturer, panelSelection.wattage);
+  }, [panelSelection.manufacturer, panelSelection.wattage]);
+
+  // Compute array values
+  const arrayValues = useMemo(() => {
+    if (!currentSpecs) return null;
+    return computeArray(currentSpecs, panelSelection.seriesCount, panelSelection.parallelCount);
+  }, [currentSpecs, panelSelection.seriesCount, panelSelection.parallelCount]);
+
+  const arrayVoc = useCallback(() => {
+    if (!arrayValues) return 0;
+    return arrayValues.stringVoc;
+  }, [arrayValues]);
 
   const isConnected = useCallback((a, b) =>
     connections.some(c => (c.a === a && c.b === b) || (c.a === b && c.b === a)),
@@ -91,6 +118,18 @@ function App() {
   }, [log]);
 
   const validate = useCallback(() => {
+    if (!currentSpecs || !arrayValues) return;
+
+    // Check 1: Panel max system voltage (independent of wiring)
+    // This runs even if panel isn't connected to anything
+    if (!panelDestroyed && arrayValues.stringVoc > currentSpecs.maxSystemVoltage) {
+      setPanelDestroyed(true);
+      triggerFlash(false);
+      log('FAULT', `The panel array just failed.`,
+        `This string produces ${arrayValues.stringVoc}V — the ${currentSpecs.model} is only rated for ${currentSpecs.maxSystemVoltage}V. Exceeding a panel's own system voltage rating breaks down its internal insulation, regardless of what it's connected to.`);
+      return;
+    }
+
     // Check for panel -> inverter direct connection
     if (!destroyed.inverter && placed.panel && placed.inverter && hasEdgeBetweenGroups(GROUP.panel, GROUP.inverter)) {
       fireExplosion('inverter', (key) => {
@@ -121,16 +160,33 @@ function App() {
       const pvReversed = isConnected('p_pos', 'c_pv_neg') && isConnected('p_neg', 'c_pv_pos');
       
       if (pvCorrect || pvReversed) {
-        if (arrayVoc() > CTRL_MAX_VOC) {
+        // Check 2: Controller voltage overload (existing rule)
+        const ctrlMaxVoc = CONTROLLER_SPEC.smartsolar_100_30.maxPvVoc;
+        if (arrayValues.stringVoc > ctrlMaxVoc) {
           fireExplosion('controller', (key) => {
             setDestroyed(prev => ({ ...prev, [key]: true }));
             triggerFlash(false);
             log('FAULT', `The charge controller just blew up.`,
-              `${seriesCount} panels chained together produce ${arrayVoc()}V — this controller tops out at ${CTRL_MAX_VOC}V.`);
+              `${panelSelection.seriesCount} panels chained together produce ${arrayValues.stringVoc}V — this controller tops out at ${ctrlMaxVoc}V.`);
             setTimeout(() => validate(), 100);
           });
           return;
-        } else if (pvReversed) {
+        }
+        
+        // Check 3: Controller current overload (new rule)
+        const ctrlMaxIsc = CONTROLLER_SPEC.smartsolar_100_30.maxPvIsc;
+        if (arrayValues.arrayIsc > ctrlMaxIsc) {
+          fireExplosion('controller', (key) => {
+            setDestroyed(prev => ({ ...prev, [key]: true }));
+            triggerFlash(false);
+            log('FAULT', `The charge controller just blew up.`,
+              `${panelSelection.parallelCount} parallel string${panelSelection.parallelCount > 1 ? 's' : ''} produce ${arrayValues.arrayIsc}A — this controller's PV input maxes out at ${ctrlMaxIsc}A.`);
+            setTimeout(() => validate(), 100);
+          });
+          return;
+        }
+        
+        if (pvReversed) {
           note('pv-rev', `Good news — nothing broke.`,
             `You crossed + and − going into the controller, but it's built to detect that and shut itself off safely.`);
         }
@@ -162,12 +218,13 @@ function App() {
     }
 
     // Check fully correct
+    const ctrlMaxVoc = CONTROLLER_SPEC.smartsolar_100_30.maxPvVoc;
     const fullyCorrect =
-      placed.panel && placed.controller && placed.battery && placed.inverter &&
+      placed.panel && !panelDestroyed && placed.controller && placed.battery && placed.inverter &&
       isConnected('p_pos', 'c_pv_pos') && isConnected('p_neg', 'c_pv_neg') &&
       isConnected('c_bat_pos', 'b_pos') && isConnected('c_bat_neg', 'b_neg') &&
       isConnected('b_pos', 'i_pos') && isConnected('b_neg', 'i_neg') &&
-      arrayVoc() <= CTRL_MAX_VOC &&
+      arrayValues.stringVoc <= ctrlMaxVoc &&
       !destroyed.controller && !destroyed.battery && !destroyed.inverter;
 
     // Compute wire status
@@ -210,9 +267,10 @@ function App() {
     }
     setWasFullyCorrect(fullyCorrect);
   }, [
-    destroyed, placed, connections, seriesCount, noted, wasFullyCorrect,
+    destroyed, placed, connections, panelSelection, panelDestroyed, noted, wasFullyCorrect,
     isConnected, hasEdgeBetweenGroups, isTerminalDestroyed, keyOf,
-    fireExplosion, note, log, arrayVoc, drawWires, updateIndicators, celebrate, triggerFlash
+    fireExplosion, note, log, arrayValues, currentSpecs,
+    drawWires, updateIndicators, celebrate, triggerFlash
   ]);
 
   // Handle terminal tap
@@ -284,7 +342,9 @@ function App() {
       setConnections([]);
       setSelectedTerminal(null);
       setNoted(new Set());
-      setSeriesCount(1);
+      setPanelSelection(DEFAULT_SELECTION);
+      setPanelSelectionStep(0);
+      setPanelDestroyed(false);
       setScenario('');
       setLogs([]);
       setWasFullyCorrect(false);
@@ -300,7 +360,7 @@ function App() {
     handleReset();
     
     const newSeriesCount = value === 'overvoltage' ? 3 : 1;
-    setSeriesCount(newSeriesCount);
+    setPanelSelection(prev => ({ ...prev, seriesCount: newSeriesCount }));
     
     ['panel', 'controller', 'battery', 'inverter'].forEach(t => {
       const zone = ZONES[t];
@@ -342,11 +402,11 @@ function App() {
   const anyPlaced = Object.values(placed).some(Boolean);
   
   const fullyCorrect =
-    placed.panel && placed.controller && placed.battery && placed.inverter &&
+    placed.panel && !panelDestroyed && placed.controller && placed.battery && placed.inverter &&
     isConnected('p_pos', 'c_pv_pos') && isConnected('p_neg', 'c_pv_neg') &&
     isConnected('c_bat_pos', 'b_pos') && isConnected('c_bat_neg', 'b_neg') &&
     isConnected('b_pos', 'i_pos') && isConnected('b_neg', 'i_neg') &&
-    arrayVoc() <= CTRL_MAX_VOC &&
+    arrayValues && arrayValues.stringVoc <= CONTROLLER_SPEC.smartsolar_100_30.maxPvVoc &&
     !destroyed.controller && !destroyed.battery && !destroyed.inverter;
 
   let statusText = 'Not connected';
@@ -388,8 +448,15 @@ function App() {
   // Initial log
   useEffect(() => {
     const time = new Date().toLocaleTimeString('en-GB', { hour12: false });
-    setLogs([{ time, tag: 'INFO', message: 'Pad ready. Drag the Solar Panel in first.', detail: null }]);
+    setLogs([{ time, tag: 'INFO', message: 'Pad ready. Select a Solar Panel to begin.', detail: null }]);
   }, []);
+
+  // Run validation when panel selection changes
+  useEffect(() => {
+    if (placed.panel && currentSpecs && arrayValues) {
+      validate();
+    }
+  }, [panelSelection, placed.panel, currentSpecs, arrayValues]);
 
   return (
     <>
@@ -415,7 +482,106 @@ function App() {
           <div className="sidebar-tray">
             <div className="tray-title">Components</div>
             <div className="tray-list">
-              {['panel', 'controller', 'battery', 'inverter'].map(type => (
+              {/* Solar Panel - with selection flow */}
+              <div
+                className={`tray-card panel-card ${placed.panel ? 'placed' : ''}`}
+                onClick={() => {
+                  if (!placed.panel && panelSelectionStep < 3) {
+                    setPanelSelectionStep(prev => prev + 1);
+                  }
+                }}
+              >
+                <div className="swatch sw-panel">☀</div>
+                <div className="tc-info">
+                  {panelSelectionStep === 0 && (
+                    <>
+                      <div className="tc-name">Solar Panel</div>
+                      <div className="tc-hint">Click to select manufacturer</div>
+                    </>
+                  )}
+                  {panelSelectionStep === 1 && (
+                    <>
+                      <div className="tc-name">Solar Panel</div>
+                      <div className="tc-hint">Select wattage:</div>
+                      <div className="wattage-selector">
+                        {Object.keys(getProducts(panelSelection.manufacturer)).map(w => (
+                          <button
+                            key={w}
+                            className={`wattage-btn ${panelSelection.wattage === parseInt(w) ? 'selected' : ''}`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setPanelSelection(prev => ({ ...prev, wattage: parseInt(w) }));
+                              setPanelSelectionStep(2);
+                            }}
+                          >
+                            {w}W
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                  {panelSelectionStep === 2 && (
+                    <>
+                      <div className="tc-name">{currentSpecs?.model}</div>
+                      <div className="tc-hint">Configure array:</div>
+                      <div className="array-config">
+                        <label>
+                          Series:
+                          <input
+                            type="number"
+                            min="1"
+                            max="20"
+                            value={panelSelection.seriesCount}
+                            onChange={(e) => {
+                              const val = Math.max(1, Math.min(20, parseInt(e.target.value) || 1));
+                              setPanelSelection(prev => ({ ...prev, seriesCount: val }));
+                              setPanelDestroyed(false);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </label>
+                        <label>
+                          Parallel:
+                          <input
+                            type="number"
+                            min="1"
+                            max="10"
+                            value={panelSelection.parallelCount}
+                            onChange={(e) => {
+                              const val = Math.max(1, Math.min(10, parseInt(e.target.value) || 1));
+                              setPanelSelection(prev => ({ ...prev, parallelCount: val }));
+                              setPanelDestroyed(false);
+                            }}
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                        </label>
+                        <button
+                          className="place-btn"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (!placed.panel) {
+                              handleTrayClick('panel');
+                            }
+                          }}
+                        >
+                          Place on roof
+                        </button>
+                      </div>
+                    </>
+                  )}
+                  {panelSelectionStep === 3 && placed.panel && (
+                    <>
+                      <div className="tc-name">{currentSpecs?.model}</div>
+                      <div className="tc-hint">
+                        {panelSelection.seriesCount}S × {panelSelection.parallelCount}P
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              {/* Other components - unchanged */}
+              {['controller', 'battery', 'inverter'].map(type => (
                 <div
                   key={type}
                   className={`tray-card ${placed[type] ? 'placed' : ''}`}
@@ -424,7 +590,6 @@ function App() {
                   onClick={() => handleTrayClick(type)}
                 >
                   <div className={`swatch sw-${type}`}>
-                    {type === 'panel' && '☀'}
                     {type === 'controller' && '⌁'}
                     {type === 'battery' && '▮'}
                     {type === 'inverter' && '▭'}
@@ -432,7 +597,6 @@ function App() {
                   <div className="tc-info">
                     <div className="tc-name">{NICE_NAMES[type]}</div>
                     <div className="tc-hint">
-                      {type === 'panel' && 'Drag to the roof zone'}
                       {type === 'controller' && 'Drag near the wall'}
                       {type === 'battery' && 'Drag to the floor'}
                       {type === 'inverter' && 'Drag near the wall'}
@@ -501,13 +665,29 @@ function App() {
               </div>
             </div>
             <div className="dash-card">
-              <div className="label">Panel power</div>
-              <div className="power-num">{arrayVoc()} V</div>
-              <div className="power-cap">
-                {seriesCount > 1
-                  ? `${seriesCount} panels chained`
-                  : 'From the panel'}
-              </div>
+              <div className="label">Array specs</div>
+              {arrayValues && currentSpecs ? (
+                <div className="array-specs">
+                  <div className="spec-row">
+                    <span>String Voc</span>
+                    <b>{arrayValues.stringVoc} V</b>
+                  </div>
+                  <div className="spec-row">
+                    <span>Array Isc</span>
+                    <b>{arrayValues.arrayIsc} A</b>
+                  </div>
+                  <div className="spec-row">
+                    <span>String Vmp</span>
+                    <b>{arrayValues.stringVmp} V</b>
+                  </div>
+                  <div className="spec-row">
+                    <span>Array Imp</span>
+                    <b>{arrayValues.arrayImp} A</b>
+                  </div>
+                </div>
+              ) : (
+                <div className="power-cap">Select a panel to begin</div>
+              )}
             </div>
           </div>
 

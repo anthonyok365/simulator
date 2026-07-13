@@ -673,3 +673,134 @@ body {
     right: 14px;
   }
 }
+
+/* ===== PANEL SELECTION UI ===== */
+.wattage-selector {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.wattage-btn {
+  flex: 1;
+  min-width: 60px;
+  padding: 6px 8px;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  background: var(--surface-2);
+  color: var(--text-mute);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.wattage-btn:hover {
+  border-color: var(--amber);
+  color: var(--text);
+}
+
+.wattage-btn.selected {
+  background: var(--amber);
+  color: #0a0c08;
+  border-color: var(--amber);
+}
+
+.array-config {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.array-config label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: var(--text-mute);
+  gap: 8px;
+}
+
+.array-config input {
+  width: 50px;
+  padding: 4px 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  text-align: center;
+}
+
+.array-config input:focus {
+  outline: none;
+  border-color: var(--amber);
+}
+
+.place-btn {
+  margin-top: 4px;
+  padding: 8px;
+  font-family: 'Rajdhani', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  background: linear-gradient(135deg, #2d5a1e, #1e3d14);
+  color: #a8f5c4;
+  border: 1px solid #3a6b28;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.place-btn:hover {
+  background: linear-gradient(135deg, #3a7528, #285418);
+  border-color: #4a8b38;
+}
+
+/* Array specs display */
+.array-specs {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.array-specs .spec-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 11px;
+}
+
+.array-specs .spec-row span {
+  color: var(--text-dim);
+}
+
+.array-specs .spec-row b {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: var(--text);
+  font-size: 12px;
+}
+
+/* Panel card placed state */
+.panel-card.placed {
+  opacity: 1;
+  cursor: default;
+}
+
+.panel-card.placed .tc-hint {
+  color: var(--green);
+}
+
+/* Panel destroyed indicator */
+.panel-card.destroyed {
+  opacity: 0.5;
+  border-color: var(--ember);
+}
+
+.panel-card.destroyed .tc-hint {
+  color: var(--ember);
+}

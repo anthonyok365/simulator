@@ -1,7 +1,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { PANEL_SPEC, CTRL_MAX_VOC, INV_MIN_V, INV_MAX_V, OWNER, GROUP, ZONES, RED, BLACK } from '../utils/constants';
+import { INV_MIN_V, INV_MAX_V, OWNER, GROUP, ZONES, RED, BLACK } from '../utils/constants';
 
 export function useThreeScene() {
   const canvasRef = useRef(null);

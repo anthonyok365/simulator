@@ -1,5 +1,3 @@
-export const PANEL_SPEC = { voc: 47.2, isc: 10.90, vmp: 38.7, imp: 10.34, pmax: 400 };
-export const CTRL_MAX_VOC = 100;
 export const INV_MIN_V = 9.3;
 export const INV_MAX_V = 17;
 
