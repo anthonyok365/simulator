@@ -395,150 +395,142 @@ function App() {
     <>
       <div className={`flash ${flashActive ? 'go' : ''} ${flashGood ? 'good' : ''}`} />
 
-      {/* Hero */}
-      <div className="hero">
-        <div className="hero-left">
-          <div className="kicker">
-            <span className="dot"></span>
-            Solar wiring, made obvious
+      <div className="app-layout">
+        {/* ===== LEFT SIDEBAR ===== */}
+        <aside className="sidebar">
+          <div className="sidebar-header">
+            <div className="sidebar-title">Wire It Right</div>
+            <div className="sidebar-subtitle">Solar wiring simulator</div>
           </div>
-          <h1>
-            Build the install.<br />
-            See what <span>breaks</span> — safely.
-          </h1>
-          <div className="sub">
-            A real solar system, built from real equipment. <b>Drag each part onto the pad</b>, wire it up, and watch exactly what happens — right or very wrong.
-          </div>
-        </div>
-        <div className="howto">
-          <div className="how-step">
-            <div className="n">1 · Drag</div>
-            <p>Drag a part from the tray onto the pad.</p>
-          </div>
-          <div className="how-step">
-            <div className="n">2 · Connect</div>
-            <p>Click a terminal, then the one to join it to.</p>
-          </div>
-          <div className="how-step">
-            <div className="n">3 · Watch</div>
-            <p>See it power up — or blow up.</p>
-          </div>
-        </div>
-      </div>
 
-      {/* Tray */}
-      <div className="tray">
-        {['panel', 'controller', 'battery', 'inverter'].map(type => (
-          <div
-            key={type}
-            className={`tray-card ${placed[type] ? 'placed' : ''}`}
-            draggable={!placed[type]}
-            onDragStart={(e) => handleDragStart(e, type)}
-            onClick={() => handleTrayClick(type)}
-          >
-            <div className={`swatch sw-${type}`}>
-              {type === 'panel' && '☀'}
-              {type === 'controller' && '⌁'}
-              {type === 'battery' && '▮'}
-              {type === 'inverter' && '▭'}
+          {/* Wiring Key */}
+          <div className="sidebar-controls">
+            <div className="sidebar-wiring-key">
+              <span><span className="swatch-dot red"></span> Red = positive (+)</span>
+              <span><span className="swatch-dot black"></span> Dark = negative (−)</span>
             </div>
-            <div>
-              <div className="tc-name">{NICE_NAMES[type]}</div>
-              <div className="tc-hint">
-                {type === 'panel' && 'Drag to the roof zone'}
-                {type === 'controller' && 'Drag near the wall'}
-                {type === 'battery' && 'Drag to the floor'}
-                {type === 'inverter' && 'Drag near the wall'}
+          </div>
+
+          {/* Tray */}
+          <div className="sidebar-tray">
+            <div className="tray-title">Components</div>
+            <div className="tray-list">
+              {['panel', 'controller', 'battery', 'inverter'].map(type => (
+                <div
+                  key={type}
+                  className={`tray-card ${placed[type] ? 'placed' : ''}`}
+                  draggable={!placed[type]}
+                  onDragStart={(e) => handleDragStart(e, type)}
+                  onClick={() => handleTrayClick(type)}
+                >
+                  <div className={`swatch sw-${type}`}>
+                    {type === 'panel' && '☀'}
+                    {type === 'controller' && '⌁'}
+                    {type === 'battery' && '▮'}
+                    {type === 'inverter' && '▭'}
+                  </div>
+                  <div className="tc-info">
+                    <div className="tc-name">{NICE_NAMES[type]}</div>
+                    <div className="tc-hint">
+                      {type === 'panel' && 'Drag to the roof zone'}
+                      {type === 'controller' && 'Drag near the wall'}
+                      {type === 'battery' && 'Drag to the floor'}
+                      {type === 'inverter' && 'Drag near the wall'}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Footer Controls */}
+          <div className="sidebar-footer">
+            <select 
+              className="sidebar-scenario"
+              value={scenario} 
+              onChange={(e) => handleScenarioChange(e.target.value)}
+            >
+              <option value="">Show me an example…</option>
+              <option value="correct">✓ A correct, working system</option>
+              <option value="bypass_inverter">✗ Skip the controller → inverter</option>
+              <option value="bypass_battery">✗ Skip the controller → battery</option>
+              <option value="reverse_inverter">✗ Battery wired backwards</option>
+              <option value="overvoltage">✗ Too many panels chained together</option>
+            </select>
+            <button className="sidebar-btn reset" onClick={handleReset}>
+              ⟲ Start over
+            </button>
+          </div>
+        </aside>
+
+        {/* ===== MAIN AREA ===== */}
+        <main className="main-area">
+          {/* Viewport / Canvas */}
+          <div className="viewport">
+            <canvas
+              ref={canvasRef}
+              id="scene-canvas"
+              onPointerDown={handlePointerDown}
+              onPointerUp={handlePointerUp}
+            />
+            <div className="vp-hint">
+              Drag &amp; drop to place equipment. Click and drag empty space to rotate the view.
+            </div>
+            <div className="vp-badge">{badgeText}</div>
+            <div className="vp-empty" style={{ opacity: isEmpty ? 1 : 0 }}>
+              <p>The install pad is empty — drag a part in to begin</p>
+            </div>
+          </div>
+
+          {/* Dashboard Overlay */}
+          <div className="dashboard-overlay">
+            <div className="dash-card">
+              <div className="label">What's happening</div>
+              <div className={`big-status ${statusClass}`}>{statusText}</div>
+              <div className="status-desc">{statusDesc}</div>
+            </div>
+            <div className="dash-card">
+              <div className="label">Safety level</div>
+              <div className="gauge-word" style={{ color: gaugeColor }}>{gaugeWord}</div>
+              <div className="gauge-track">
+                <div className="gauge-fill" style={{ width: `${gaugePct}%`, background: gaugeColor }} />
+              </div>
+              <div className="gauge-label">
+                <span>Safe</span>
+                <span>Danger</span>
+              </div>
+            </div>
+            <div className="dash-card">
+              <div className="label">Panel power</div>
+              <div className="power-num">{arrayVoc()} V</div>
+              <div className="power-cap">
+                {seriesCount > 1
+                  ? `${seriesCount} panels chained`
+                  : 'From the panel'}
               </div>
             </div>
           </div>
-        ))}
-      </div>
 
-      {/* Viewport */}
-      <div className="viewport">
-        <canvas
-          ref={canvasRef}
-          id="scene-canvas"
-          onPointerDown={handlePointerDown}
-          onPointerUp={handlePointerUp}
-        />
-        <div className="vp-hint">
-          Drag &amp; drop to place equipment. Click and drag empty space to rotate the view.
-        </div>
-        <div className="vp-badge">{badgeText}</div>
-        <div className="vp-empty" style={{ opacity: isEmpty ? 1 : 0 }}>
-          <p>The install pad is empty — drag a part in to begin</p>
-        </div>
-      </div>
-
-      {/* Wiring Key */}
-      <div className="wiring-key">
-        <span><span className="swatch-dot red"></span> Red = positive (+)</span>
-        <span><span className="swatch-dot black"></span> Dark = negative (−)</span>
-        <span style={{ color: 'var(--text-dim)' }}>Match colors to do it right. Cross them, and see what happens.</span>
-      </div>
-
-      {/* Controls */}
-      <div className="controls-row">
-        <select value={scenario} onChange={(e) => handleScenarioChange(e.target.value)}>
-          <option value="">Show me an example…</option>
-          <option value="correct">✓ A correct, working system</option>
-          <option value="bypass_inverter">✗ Skip the controller → inverter</option>
-          <option value="bypass_battery">✗ Skip the controller → battery</option>
-          <option value="reverse_inverter">✗ Battery wired backwards</option>
-          <option value="overvoltage">✗ Too many panels chained together</option>
-        </select>
-        <button className="ctrl reset" onClick={handleReset}>⟲ Start over</button>
-      </div>
-
-      {/* Dashboard */}
-      <div className="dash">
-        <div className="dash-card">
-          <div className="label">What's happening</div>
-          <div className={`big-status ${statusClass}`}>{statusText}</div>
-          <div className="status-desc">{statusDesc}</div>
-        </div>
-        <div className="dash-card">
-          <div className="label">Safety level</div>
-          <div className="gauge-word" style={{ color: gaugeColor }}>{gaugeWord}</div>
-          <div className="gauge-track">
-            <div className="gauge-fill" style={{ width: `${gaugePct}%`, background: gaugeColor }} />
-          </div>
-          <div className="gauge-label">
-            <span>Safe</span>
-            <span>Danger</span>
-          </div>
-        </div>
-        <div className="dash-card">
-          <div className="label">Panel power right now</div>
-          <div className="power-num">{arrayVoc()} V</div>
-          <div className="power-cap">
-            {seriesCount > 1
-              ? `${seriesCount} panels chained in series — voltage adds up`
-              : 'Voltage coming from the panel'}
-          </div>
-        </div>
-      </div>
-
-      {/* Log */}
-      <div className="log-section">
-        <div className="log-title">
-          <span>What happened</span>
-          <span className="count">{logs.length} events</span>
-        </div>
-        <div className="log-box">
-          {logs.map((entry, idx) => (
-            <div key={idx} className="log-entry">
-              <div className="log-top">
-                <span className="log-time">{entry.time}</span>
-                <span className={`log-tag ${entry.tag}`}>{entry.tag}</span>
-              </div>
-              <div className="log-msg">{entry.message}</div>
-              {entry.detail && <div className="log-detail">{entry.detail}</div>}
+          {/* Log Overlay */}
+          <div className="log-overlay">
+            <div className="log-header">
+              <div className="log-title">What happened</div>
+              <div className="log-count">{logs.length} events</div>
             </div>
-          ))}
-        </div>
+            <div className="log-content">
+              {logs.map((entry, idx) => (
+                <div key={idx} className="log-entry">
+                  <div className="log-top">
+                    <span className="log-time">{entry.time}</span>
+                    <span className={`log-tag ${entry.tag}`}>{entry.tag}</span>
+                  </div>
+                  <div className="log-msg">{entry.message}</div>
+                  {entry.detail && <div className="log-detail">{entry.detail}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </main>
       </div>
     </>
   );
