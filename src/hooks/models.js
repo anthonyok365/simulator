@@ -11,8 +11,8 @@ function getPanelTexture() {
 }
 
 export function buildSinglePanel(specs, texture, cols, rows) {
-  const width = specs ? specs.dimensions[0] / 1000 : 1.855;
-  const height = specs ? specs.dimensions[1] / 1000 : 1.029;
+  const width = specs ? specs.dimensions[0] / 1000 : 1.029;
+  const height = specs ? specs.dimensions[1] / 1000 : 1.855;
 
   const frameThick = 0.04;
   const frameDepth = 0.03;
