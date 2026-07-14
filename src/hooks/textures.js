@@ -108,7 +108,7 @@ export function makePanelTexture(cols, rows, panelWidth, panelHeight) {
   const ctx = canvas.getContext('2d');
   
   ctx.fillStyle = '#0a0a0d';
-  ctx.fillRect(0, 0, SIZE, SIZE);
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
   
   const cellW = SIZE / cols;
   const cellH = SIZE / rows;
