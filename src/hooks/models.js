@@ -268,9 +268,10 @@ export function buildController() {
   body.receiveShadow = true;
   g.add(body);
 
+  const mpptTexture = makeScreenTexture('MPPT', '#5be08a');
   const screenMat = new THREE.MeshStandardMaterial({
-    map: makeScreenTexture('MPPT', '#5be08a'),
-    emissiveMap: makeScreenTexture('MPPT', '#5be08a'),
+    map: mpptTexture,
+    emissiveMap: mpptTexture,
     emissive: 0xffffff,
     emissiveIntensity: 0.6,
     roughness: 0.3
@@ -352,9 +353,10 @@ export function buildInverter() {
   body.receiveShadow = true;
   g.add(body);
 
+  const voltageTexture = makeScreenTexture('120V', '#4ee08a');
   const screenMat = new THREE.MeshStandardMaterial({
-    map: makeScreenTexture('120V', '#4ee08a'),
-    emissiveMap: makeScreenTexture('120V', '#4ee08a'),
+    map: voltageTexture,
+    emissiveMap: voltageTexture,
     emissive: 0xffffff,
     emissiveIntensity: 0.6
   });

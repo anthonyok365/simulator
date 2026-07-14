@@ -7,6 +7,8 @@ import { buildResidentialBackdrop } from './backgrounds';
 import { BUILDERS } from './models';
 import { fireExplosion, celebrate } from './effects';
 import { selectTerminal, deselectTerminal, resetTerminal, handleTerminalTap } from './terminals';
+// Alias to avoid naming conflict
+import { handleTerminalTap as doTerminalTap } from './terminals';
 import { drawWires, updateIndicators, setBackground, fullResetScene } from './sceneUtils';
 
 export function useThreeScene() {
@@ -231,7 +233,7 @@ export function useThreeScene() {
   }, []);
 
   const handleTerminalTap = useCallback((id, onTap) => {
-    handleTerminalTap(terminalRegistryRef, id, onTap);
+    doTerminalTap(terminalRegistryRef, id, onTap);
   }, []);
 
   const handleSetBackground = useCallback((panelCount, arrayWidth, arrayDepth) => {
