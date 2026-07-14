@@ -95,11 +95,16 @@ export function loadPanelTexture() {
   return null;
 }
 
-export function makePanelTexture(cols, rows) {
-  const SIZE = 512;
+export function makePanelTexture(cols, rows, panelWidth, panelHeight) {
+  const aspect = panelWidth / panelHeight;
+
+  const HEIGHT = 512;
+  const WIDTH = Math.floor(HEIGHT * aspect);
+
   const canvas = document.createElement('canvas');
-  canvas.width = SIZE;
-  canvas.height = SIZE;
+  canvas.width = WIDTH;
+  canvas.height = HEIGHT;
+
   const ctx = canvas.getContext('2d');
   
   ctx.fillStyle = '#0a0a0d';
