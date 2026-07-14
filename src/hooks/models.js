@@ -1,99 +1,78 @@
 import * as THREE from 'three';
 import { RED, BLACK } from '../utils/constants';
-import { makeScreenTexture, makeBatteryLabel, makePanelTexture, loadPanelTexture } from './textures';
+import { makeScreenTexture, makeBatteryLabel, makePanelTexture } from './textures';
 import { makeTerminal } from './terminals';
 
-// Get or create panel texture
-function getPanelTexture(width, height) {
-  const loadedTexture = loadPanelTexture();
-  if (loadedTexture) return loadedTexture;
-  return makePanelTexture(10, 6, width, height);
+// Create a procedural panel texture (like HTML version)
+function createPanelTexture() {
+  const texture = makePanelTexture(1, 1);
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  return texture;
 }
 
-export function buildSinglePanel(specs, texture, cols, rows) {
+export function buildSinglePanel(specs, texture) {
   const width = specs ? specs.dimensions[0] / 1000 : 1.029;
   const height = specs ? specs.dimensions[1] / 1000 : 1.855;
 
-  const frameThick = 0.04;
-  const frameDepth = 0.03;
-  const frameColor = 0xb8bdb8;
-  const frameInnerColor = 0x8a8f88;
-
   const panelGroup = new THREE.Group();
 
-  const frameMat = new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.35, metalness: 0.75 });
+  // Backing (aluminum box) - matches HTML design
+  const backingMat = new THREE.MeshStandardMaterial({
+    color: 0xb9bdb8,
+    roughness: 0.45,
+    metalness: 0.55
+  });
+  const backing = new THREE.Mesh(
+    new THREE.BoxGeometry(width, height, 0.03),
+    backingMat
+  );
+  backing.position.y = height / 2;
+  backing.castShadow = true;
+  backing.receiveShadow = true;
+  panelGroup.add(backing);
 
-  const topFrame = new THREE.Mesh(new THREE.BoxGeometry(width + frameThick * 2, frameThick, frameDepth), frameMat);
-  topFrame.position.set(0, height / 2 + frameThick / 2, 0);
-  topFrame.castShadow = true;
-  panelGroup.add(topFrame);
-
-  const bottomFrame = topFrame.clone();
-  bottomFrame.position.y = -(height / 2 + frameThick / 2);
-  panelGroup.add(bottomFrame);
-
-  const leftFrame = new THREE.Mesh(new THREE.BoxGeometry(frameThick, height, frameDepth), frameMat);
-  leftFrame.position.set(-(width / 2 + frameThick / 2), 0, 0);
-  leftFrame.castShadow = true;
-  panelGroup.add(leftFrame);
-
-  const rightFrame = leftFrame.clone();
-  rightFrame.position.x = width / 2 + frameThick / 2;
-  panelGroup.add(rightFrame);
-
-  const innerFrameMat = new THREE.MeshStandardMaterial({ color: frameInnerColor, roughness: 0.4, metalness: 0.7 });
-  const innerInset = 0.012;
-  const innerThick = 0.008;
-
-  const innerTop = new THREE.Mesh(
-    new THREE.BoxGeometry(width - innerInset * 2, innerThick, frameDepth * 0.3), innerFrameMat);
-  innerTop.position.set(0, height / 2 - innerInset - innerThick / 2, frameDepth * 0.15);
-  panelGroup.add(innerTop);
-  innerTop.clone().position.y = -(height / 2 - innerInset - innerThick / 2);
-  panelGroup.add(innerTop.clone());
-
-  const innerLeft = new THREE.Mesh(
-    new THREE.BoxGeometry(innerThick, height - innerInset * 2 - innerThick * 2, frameDepth * 0.3), innerFrameMat);
-  innerLeft.position.set(-(width / 2 - innerInset - innerThick / 2), 0, frameDepth * 0.15);
-  panelGroup.add(innerLeft);
-  innerLeft.clone().position.x = width / 2 - innerInset - innerThick / 2;
-  panelGroup.add(innerLeft.clone());
-
-  const cellMat = new THREE.MeshStandardMaterial({
+  // Face (photo texture) - matches HTML design
+  const faceMat = new THREE.MeshStandardMaterial({
     map: texture,
-    roughness: 0.15,
-    metalness: 0.1
+    roughness: 0.22,
+    metalness: 0.12
   });
-  texture.repeat.set(cols, rows);
-
-  const cellSurface = new THREE.Mesh(
-    new THREE.PlaneGeometry(width - frameThick * 2, height - frameThick * 2),
-    cellMat
+  const face = new THREE.Mesh(
+    new THREE.PlaneGeometry(width * 0.97, height * 0.97),
+    faceMat
   );
-  cellSurface.rotation.x = -Math.PI / 2;
-  cellSurface.position.y = 0.001;
-  cellSurface.receiveShadow = true;
-  panelGroup.add(cellSurface);
+  face.position.set(0, height / 2, 0.019);
+  face.castShadow = true;
+  panelGroup.add(face);
 
-  const crossbarMat = new THREE.MeshStandardMaterial({ color: frameColor, roughness: 0.35, metalness: 0.75 });
-  const crossbar = new THREE.Mesh(
-    new THREE.BoxGeometry(width - frameThick * 2, 0.025, 0.015),
-    crossbarMat
-  );
-  crossbar.position.set(0, 0, frameDepth * 0.5 + 0.008);
-  crossbar.castShadow = true;
-  panelGroup.add(crossbar);
+  // Terminals on the panel face - matches HTML design
+  function makeTerm(color) {
+    return new THREE.Mesh(
+      new THREE.SphereGeometry(0.04, 10, 10),
+      new THREE.MeshStandardMaterial({
+        color,
+        emissive: color,
+        emissiveIntensity: 0.6
+      })
+    );
+  }
 
-  const holeMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.8 });
-  [[-1, 1], [1, 1], [-1, -1], [1, -1]].forEach(([sx, sy]) => {
-    const hole = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.015, 0.015, frameDepth * 1.5, 12), holeMat);
-    hole.rotation.x = Math.PI / 2;
-    hole.position.set(sx * width * 0.35, sy * height * 0.35, 0);
-    panelGroup.add(hole);
-  });
+  const tPos = makeTerm(RED);
+  tPos.position.set(-width * 0.28, height * 0.05, 0.05);
+  const tNeg = makeTerm(BLACK);
+  tNeg.position.set(width * 0.28, height * 0.05, 0.05);
 
-  panelGroup.rotation.x = -0.5;
+  panelGroup.add(tPos);
+  panelGroup.add(tNeg);
+
+  panelGroup.userData.terminals = { pos: tPos, neg: tNeg };
+
+  // Tilt for roof mount - 22 degrees like HTML
+  const tiltRad = 22 * Math.PI / 180;
+  panelGroup.rotation.x = -tiltRad;
+
   return panelGroup;
 }
 
@@ -152,24 +131,16 @@ export function makeCombinerBox(position) {
 export function buildPanel(specs, seriesCount = 1, parallelCount = 1) {
   const g = new THREE.Group();
 
-  const width = specs ? specs.dimensions[0] / 1000 : 1.855;
-  const height = specs ? specs.dimensions[1] / 1000 : 1.029;
+  const width = specs ? specs.dimensions[0] / 1000 : 1.029;
+  const height = specs ? specs.dimensions[1] / 1000 : 1.855;
   const frameGap = 0.02;
 
-  const texture = getPanelTexture(width, height);
+  const texture = createPanelTexture();
 
-  const cellAspect = width / height;
-  let cols, rows;
-  if (cellAspect > 1.8) {
-    cols = 12;
-    rows = Math.round(12 / cellAspect * 1.5);
-  } else {
-    cols = 10;
-    rows = 6;
-  }
-
+  const tiltRad = 22 * Math.PI / 180;
   const arrayWidth = seriesCount * (width + frameGap);
 
+  // Mounting legs - simplified like HTML
   const legMat = new THREE.MeshStandardMaterial({ color: 0x8a8f88, roughness: 0.5, metalness: 0.6 });
   const legHeight = 1.2;
 
@@ -189,33 +160,35 @@ export function buildPanel(specs, seriesCount = 1, parallelCount = 1) {
   for (let p = 0; p < parallelCount; p++) {
     for (let s = 0; s < seriesCount; s++) {
       const x = s * (width + frameGap) - arrayWidth / 2 + width / 2;
-      const z = p * (height * Math.cos(0.5) + frameGap) + 0.3;
+      const z = p * (height * Math.cos(tiltRad) + frameGap) + 0.3;
 
-      const panel = buildSinglePanel(specs, texture, cols, rows);
+      const panel = buildSinglePanel(specs, texture);
       panel.position.set(x, height / 2 + 0.4, z);
       g.add(panel);
 
-      panelPositions.push({ x, z, panel });
+      panelPositions.push({ x, z, panel, panelTerminals: panel.userData.terminals });
 
-      if (s === 0) {
+      // Array-level terminals (first panel's neg, last panel's pos)
+      if (s === 0 && p === 0) {
         const tPos = makeTerminal('p_pos', RED);
-        tPos.position.set(x - width / 2 - 0.1, height / 2 + 0.5, z + 0.35);
+        tPos.position.set(x - width * 0.28, height * 0.05 + 0.4, z + 0.05);
         g.add(tPos);
         terminals.p_pos = tPos;
       }
 
-      if (s === seriesCount - 1) {
+      if (s === seriesCount - 1 && p === 0) {
         const tNeg = makeTerminal('p_neg', BLACK);
-        tNeg.position.set(x + width / 2 + 0.1, height / 2 + 0.5, z + 0.35);
+        tNeg.position.set(x + width * 0.28, height * 0.05 + 0.4, z + 0.05);
         g.add(tNeg);
         terminals.p_neg = tNeg;
       }
 
+      // Series cables between panels
       if (s > 0) {
         const prevX = (s - 1) * (width + frameGap) - arrayWidth / 2 + width / 2;
         cables.push({
-          start: { x: prevX + width / 2, y: height / 2 + 0.45, z: z + 0.1 },
-          end: { x: x - width / 2, y: height / 2 + 0.45, z: z + 0.1 },
+          start: { x: prevX + width * 0.28, y: height * 0.05 + 0.4, z: z + 0.05 },
+          end: { x: x - width * 0.28, y: height * 0.05 + 0.4, z: z + 0.05 },
           isPositive: false
         });
       }
@@ -231,6 +204,7 @@ export function buildPanel(specs, seriesCount = 1, parallelCount = 1) {
     g.add(cable);
   });
 
+  // Combiner box - positioned at the end like HTML
   const combinerPos = new THREE.Vector3(
     arrayWidth / 2 + 0.5,
     height / 2 + 0.6,
@@ -239,11 +213,12 @@ export function buildPanel(specs, seriesCount = 1, parallelCount = 1) {
   const combiner = makeCombinerBox(combinerPos);
   g.add(combiner);
 
+  // Cables from last panel in each row to combiner
   panelPositions.forEach((pos, idx) => {
     const isLastInRow = (idx + 1) % seriesCount === 0;
     if (isLastInRow) {
       const cable = makeJumperCable(
-        new THREE.Vector3(pos.x + width / 2, height / 2 + 0.45, pos.z + 0.1),
+        new THREE.Vector3(pos.x + width * 0.28, height * 0.05 + 0.4, pos.z + 0.05),
         new THREE.Vector3(combinerPos.x - 0.2, combinerPos.y, combinerPos.z),
         false
       );
