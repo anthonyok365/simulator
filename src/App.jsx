@@ -39,6 +39,7 @@ function App() {
 
   const downPosRef = useRef(null);
   const downTimeRef = useRef(0);
+  const onTerminalTapRef = useRef(null);
 
   const {
     canvasRef,
@@ -58,11 +59,6 @@ function App() {
     resetTerminal,
     setBackground
   } = useThreeScene();
-
-  // Set up terminal tap handler
-  useEffect(() => {
-    setOnTerminalTap(onTerminalTap);
-  }, [setOnTerminalTap, onTerminalTap]);
 
   // Get current panel specs
   const currentSpecs = useMemo(() => {
@@ -309,6 +305,12 @@ function App() {
     setSelectedTerminal(null);
     setTimeout(() => validate(), 50);
   }, [selectedTerminal, isTerminalDestroyed, log, selectTerminal, deselectTerminal, resetTerminal, validate]);
+
+  // Set up terminal tap handler after onTerminalTap is defined
+  useEffect(() => {
+    onTerminalTapRef.current = onTerminalTap;
+    setOnTerminalTap(onTerminalTap);
+  }, [setOnTerminalTap, onTerminalTap]);
 
   // Canvas interaction
   const handlePointerDown = useCallback((e) => {
