@@ -1,18 +1,9 @@
 import * as THREE from 'three';
 import { RED, BLACK } from '../utils/constants';
-import { makeScreenTexture, makeBatteryLabel, makePanelTexture } from './textures';
+import { makeScreenTexture, makeBatteryLabel } from './textures';
 import { makeTerminal } from './terminals';
 
-// Create a procedural panel texture (like HTML version)
-function createPanelTexture() {
-  const texture = makePanelTexture(1, 1);
-  texture.wrapS = THREE.ClampToEdgeWrapping;
-  texture.wrapT = THREE.ClampToEdgeWrapping;
-  texture.colorSpace = THREE.SRGBColorSpace;
-  return texture;
-}
-
-export function buildSinglePanel(specs, texture) {
+export function buildSinglePanel(specs) {
   const width = specs ? specs.dimensions[0] / 1000 : 1.029;
   const height = specs ? specs.dimensions[1] / 1000 : 1.855;
 
@@ -33,9 +24,9 @@ export function buildSinglePanel(specs, texture) {
   backing.receiveShadow = true;
   panelGroup.add(backing);
 
-  // Face (photo texture) - matches HTML design
+  // Face - dark panel material (like HTML version)
   const faceMat = new THREE.MeshStandardMaterial({
-    map: texture,
+    color: 0x0a0a0d,
     roughness: 0.22,
     metalness: 0.12
   });
@@ -135,8 +126,6 @@ export function buildPanel(specs, seriesCount = 1, parallelCount = 1) {
   const height = specs ? specs.dimensions[1] / 1000 : 1.855;
   const frameGap = 0.02;
 
-  const texture = createPanelTexture();
-
   const tiltRad = 22 * Math.PI / 180;
   const arrayWidth = seriesCount * (width + frameGap);
 
@@ -162,7 +151,7 @@ export function buildPanel(specs, seriesCount = 1, parallelCount = 1) {
       const x = s * (width + frameGap) - arrayWidth / 2 + width / 2;
       const z = p * (height * Math.cos(tiltRad) + frameGap) + 0.3;
 
-      const panel = buildSinglePanel(specs, texture);
+      const panel = buildSinglePanel(specs);
       panel.position.set(x, height / 2 + 0.4, z);
       g.add(panel);
 
