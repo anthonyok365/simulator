@@ -95,36 +95,57 @@ export function loadPanelTexture() {
   return null;
 }
 
-export function makePanelTexture(cols, rows, panelWidth, panelHeight) {
-  const aspect = panelWidth / panelHeight;
+export function makePanelTexture(cols, rows, panelWidth = 1, panelHeight = 1) {
+  // ✅ Safe aspect ratio
+  const aspect = panelWidth && panelHeight
+    ? panelWidth / panelHeight
+    : 1;
 
-  const HEIGHT = 512;
-  const WIDTH = Math.floor(HEIGHT * aspect);
+  // ✅ Keep texture size reasonable & consistent
+  const BASE = 1024;
+
+  let WIDTH, HEIGHT;
+
+  if (aspect >= 1) {
+    WIDTH = BASE;
+    HEIGHT = Math.floor(BASE / aspect);
+  } else {
+    HEIGHT = BASE;
+    WIDTH = Math.floor(BASE * aspect);
+  }
 
   const canvas = document.createElement('canvas');
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
-  SIZE = HEIGHT;
 
   const ctx = canvas.getContext('2d');
-  
+
+  // 🌑 Background
   ctx.fillStyle = '#0a0a0d';
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  
+
   const cellW = WIDTH / cols;
   const cellH = HEIGHT / rows;
-  
+
+  // 🔲 Cells
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
       const brightness = 0.92 + Math.random() * 0.08;
-      ctx.fillStyle = `rgb(${Math.floor(10 * brightness)},${Math.floor(10 * brightness)},${Math.floor(13 * brightness)})`;
-      ctx.fillRect(c * cellW + 1, r * cellH + 1, cellW - 2, cellH - 2);
+      ctx.fillStyle = `rgb(${10 * brightness}, ${10 * brightness}, ${13 * brightness})`;
+
+      ctx.fillRect(
+        c * cellW + 1,
+        r * cellH + 1,
+        cellW - 2,
+        cellH - 2
+      );
     }
   }
-  
+
+  // 🔬 Fine grid (cell lines)
   ctx.strokeStyle = 'rgba(74, 77, 82, 0.35)';
   ctx.lineWidth = 0.5;
-  
+
   for (let c = 0; c < cols; c++) {
     for (let i = 1; i <= 11; i++) {
       const x = c * cellW + (i / 12) * cellW;
@@ -134,7 +155,7 @@ export function makePanelTexture(cols, rows, panelWidth, panelHeight) {
       ctx.stroke();
     }
   }
-  
+
   for (let r = 0; r < rows; r++) {
     for (let i = 1; i <= 3; i++) {
       const y = r * cellH + (i / 4) * cellH;
@@ -144,33 +165,42 @@ export function makePanelTexture(cols, rows, panelWidth, panelHeight) {
       ctx.stroke();
     }
   }
-  
+
+  // 🧱 Thick borders between cells
   ctx.strokeStyle = 'rgba(5, 5, 6, 0.8)';
   ctx.lineWidth = 2;
+
   for (let c = 0; c <= cols; c++) {
     ctx.beginPath();
     ctx.moveTo(c * cellW, 0);
     ctx.lineTo(c * cellW, HEIGHT);
     ctx.stroke();
   }
+
   for (let r = 0; r <= rows; r++) {
     ctx.beginPath();
     ctx.moveTo(0, r * cellH);
     ctx.lineTo(WIDTH, r * cellH);
     ctx.stroke();
   }
-  
+
+  // ✨ Reflection highlight
   const grad = ctx.createLinearGradient(0, 0, WIDTH * 0.3, HEIGHT * 0.3);
   grad.addColorStop(0, 'rgba(255,255,255,0.1)');
   grad.addColorStop(0.5, 'rgba(255,255,255,0)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
-  
+
+  // 🎯 Texture
   const texture = new THREE.CanvasTexture(canvas);
-  texture.wrapS = THREE.RepeatWrapping;
-  texture.wrapT = THREE.RepeatWrapping;
+
+  // ✅ DO NOT repeat (this is a full panel texture)
+  texture.wrapS = THREE.ClampToEdgeWrapping;
+  texture.wrapT = THREE.ClampToEdgeWrapping;
+
   texture.colorSpace = THREE.SRGBColorSpace;
-  
+  texture.needsUpdate = true;
+
   return texture;
 }
 
