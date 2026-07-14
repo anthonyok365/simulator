@@ -52,11 +52,17 @@ function App() {
     updateIndicators,
     fullReset,
     handleTerminalTap,
+    setOnTerminalTap,
     selectTerminal,
     deselectTerminal,
     resetTerminal,
     setBackground
   } = useThreeScene();
+
+  // Set up terminal tap handler
+  useEffect(() => {
+    setOnTerminalTap(onTerminalTap);
+  }, [setOnTerminalTap, onTerminalTap]);
 
   // Get current panel specs
   const currentSpecs = useMemo(() => {

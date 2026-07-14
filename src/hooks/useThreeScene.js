@@ -31,6 +31,14 @@ export function useThreeScene() {
   const [badgeText, setBadgeText] = useState('0 / 4 placed');
   const [isEmpty, setIsEmpty] = useState(true);
 
+  // Store the terminal tap callback ref
+  const onTerminalTapRef = useRef(null);
+
+  // Set the terminal tap callback
+  const setOnTerminalTap = useCallback((callback) => {
+    onTerminalTapRef.current = callback;
+  }, []);
+
   // Initialize scene
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -44,6 +52,10 @@ export function useThreeScene() {
     const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
     camera.position.set(11, 10, 13);
     cameraRef.current = camera;
+
+    // Raycaster for terminal click detection
+    const raycaster = new THREE.Raycaster();
+    const pointer = new THREE.Vector2();
 
     const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -125,6 +137,33 @@ export function useThreeScene() {
     window.addEventListener('resize', resize);
     resize();
 
+    // Click handler for terminal selection
+    const handleCanvasClick = (event) => {
+      if (!onTerminalTapRef.current) return;
+
+      const rect = canvas.getBoundingClientRect();
+      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(pointer, camera);
+
+      // Get all terminal meshes from the registry
+      const terminalMeshes = Object.values(terminalRegistryRef.current);
+      if (terminalMeshes.length === 0) return;
+
+      const intersects = raycaster.intersectObjects(terminalMeshes, false);
+
+      if (intersects.length > 0) {
+        const clickedMesh = intersects[0].object;
+        const terminalId = clickedMesh.userData.terminalId;
+        if (terminalId) {
+          onTerminalTapRef.current(terminalId, clickedMesh);
+        }
+      }
+    };
+
+    canvas.addEventListener('click', handleCanvasClick);
+
     // Animation loop
     let animationId;
     const animate = () => {
@@ -158,6 +197,7 @@ export function useThreeScene() {
 
     return () => {
       window.removeEventListener('resize', resize);
+      canvas.removeEventListener('click', handleCanvasClick);
       cancelAnimationFrame(animationId);
       renderer.dispose();
     };
@@ -252,6 +292,7 @@ export function useThreeScene() {
     updateIndicators: handleUpdateIndicators,
     fullReset: handleFullReset,
     handleTerminalTap,
+    setOnTerminalTap,
     selectTerminal: handleTerminalSelect,
     deselectTerminal: handleTerminalDeselect,
     resetTerminal: handleTerminalReset,
