@@ -123,6 +123,9 @@ function App() {
   const validate = useCallback(() => {
     if (!currentSpecs || !arrayValues) return;
 
+    // Guard: If everything is already destroyed, stop validating
+    if (destroyed.controller && destroyed.battery && destroyed.inverter) return;
+
     // Check 1: Panel max system voltage (independent of wiring)
     // This runs even if panel isn't connected to anything
     if (!panelDestroyed && arrayValues.stringVoc > currentSpecs.maxSystemVoltage) {
@@ -140,7 +143,6 @@ function App() {
         triggerFlash(false);
         log('FAULT', `The inverter just blew up.`,
           `The panel's ${arrayVoc()}V went straight into the inverter, which only tolerates ${INV_MIN_V}–${INV_MAX_V}V. The controller exists to prevent exactly this.`);
-        setTimeout(() => validate(), 100);
       });
       return;
     }
@@ -152,7 +154,6 @@ function App() {
         triggerFlash(false);
         log('FAULT', `The battery just overheated and failed.`,
           `The panel's ${arrayVoc()}V flooded a 12V battery with no regulation in between. Skipping the controller removed its only protection.`);
-        setTimeout(() => validate(), 100);
       });
       return;
     }
@@ -171,7 +172,6 @@ function App() {
             triggerFlash(false);
             log('FAULT', `The charge controller just blew up.`,
               `${panelSelection.seriesCount} panels chained together produce ${arrayValues.stringVoc}V — this controller tops out at ${ctrlMaxVoc}V.`);
-            setTimeout(() => validate(), 100);
           });
           return;
         }
@@ -184,7 +184,6 @@ function App() {
             triggerFlash(false);
             log('FAULT', `The charge controller just blew up.`,
               `${panelSelection.parallelCount} parallel string${panelSelection.parallelCount > 1 ? 's' : ''} produce ${arrayValues.arrayIsc}A — this controller's PV input maxes out at ${ctrlMaxIsc}A.`);
-            setTimeout(() => validate(), 100);
           });
           return;
         }
@@ -214,7 +213,6 @@ function App() {
           triggerFlash(false);
           log('FAULT', `The inverter just blew up.`,
             `Battery + and − were swapped going into the inverter. This input has no reverse-polarity protection — it fails instantly.`);
-          setTimeout(() => validate(), 100);
         });
         return;
       }
