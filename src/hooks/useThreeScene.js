@@ -14,21 +14,10 @@ function buildResidentialBackdrop(scene) {
   // House body
   
   // Pitched roof
-  const roofMat = new THREE.MeshStandardMaterial({ color: 0x5a4133, roughness: 0.85 });
-  const roofSlab = new THREE.Mesh(new THREE.BoxGeometry(6.6, 0.25, 3.6), roofMat);
-  roofSlab.position.set(-4.3, 2.75, -4.3);
-  roofSlab.rotation.x = -0.28;
-  roofSlab.castShadow = true;
-  roofSlab.receiveShadow = true;
-  group.add(roofSlab);
+
   
   // Back wall
-  const wallMat = new THREE.MeshStandardMaterial({ color: 0x33372e, roughness: 0.9 });
-  const wallSlab = new THREE.Mesh(new THREE.BoxGeometry(7.4, 3.0, 0.3), wallMat);
-  wallSlab.position.set(4.0, 1.5, -4.6);
-  wallSlab.castShadow = true;
-  wallSlab.receiveShadow = true;
-  group.add(wallSlab);
+
   
   scene.add(group);
   return group;
