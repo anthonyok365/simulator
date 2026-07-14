@@ -111,8 +111,8 @@ export function makePanelTexture(cols, rows, panelWidth, panelHeight) {
   ctx.fillStyle = '#0a0a0d';
   ctx.fillRect(0, 0, WIDTH, HEIGHT);
   
-  const cellW = SIZE / cols;
-  const cellH = SIZE / rows;
+  const cellW = WIDTH / cols;
+  const cellH = HEIGHT / rows;
   
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
@@ -130,7 +130,7 @@ export function makePanelTexture(cols, rows, panelWidth, panelHeight) {
       const x = c * cellW + (i / 12) * cellW;
       ctx.beginPath();
       ctx.moveTo(x, 0);
-      ctx.lineTo(x, SIZE);
+      ctx.lineTo(x, HEIGHT);
       ctx.stroke();
     }
   }
@@ -140,7 +140,7 @@ export function makePanelTexture(cols, rows, panelWidth, panelHeight) {
       const y = r * cellH + (i / 4) * cellH;
       ctx.beginPath();
       ctx.moveTo(0, y);
-      ctx.lineTo(SIZE, y);
+      ctx.lineTo(WIDTH, y);
       ctx.stroke();
     }
   }
@@ -150,21 +150,21 @@ export function makePanelTexture(cols, rows, panelWidth, panelHeight) {
   for (let c = 0; c <= cols; c++) {
     ctx.beginPath();
     ctx.moveTo(c * cellW, 0);
-    ctx.lineTo(c * cellW, SIZE);
+    ctx.lineTo(c * cellW, HEIGHT);
     ctx.stroke();
   }
   for (let r = 0; r <= rows; r++) {
     ctx.beginPath();
     ctx.moveTo(0, r * cellH);
-    ctx.lineTo(SIZE, r * cellH);
+    ctx.lineTo(WIDTH, r * cellH);
     ctx.stroke();
   }
   
-  const grad = ctx.createLinearGradient(0, 0, SIZE * 0.3, SIZE * 0.3);
+  const grad = ctx.createLinearGradient(0, 0, WIDTH * 0.3, HEIGHT * 0.3);
   grad.addColorStop(0, 'rgba(255,255,255,0.1)');
   grad.addColorStop(0.5, 'rgba(255,255,255,0)');
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, SIZE, SIZE);
+  ctx.fillRect(0, 0, WIDTH, HEIGHT);
   
   const texture = new THREE.CanvasTexture(canvas);
   texture.wrapS = THREE.RepeatWrapping;

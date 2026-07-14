@@ -4,10 +4,10 @@ import { makeScreenTexture, makeBatteryLabel, makePanelTexture, loadPanelTexture
 import { makeTerminal } from './terminals';
 
 // Get or create panel texture
-function getPanelTexture() {
+function getPanelTexture(width, height) {
   const loadedTexture = loadPanelTexture();
   if (loadedTexture) return loadedTexture;
-  return makePanelTexture(10, 6);
+  return makePanelTexture(10, 6, width, height);
 }
 
 export function buildSinglePanel(specs, texture, cols, rows) {
@@ -156,7 +156,7 @@ export function buildPanel(specs, seriesCount = 1, parallelCount = 1) {
   const height = specs ? specs.dimensions[1] / 1000 : 1.029;
   const frameGap = 0.02;
 
-  const texture = getPanelTexture();
+  const texture = getPanelTexture(width, height);
 
   const cellAspect = width / height;
   let cols, rows;
