@@ -104,6 +104,7 @@ export function makePanelTexture(cols, rows, panelWidth, panelHeight) {
   const canvas = document.createElement('canvas');
   canvas.width = WIDTH;
   canvas.height = HEIGHT;
+  SIZE = HEIGHT;
 
   const ctx = canvas.getContext('2d');
   
